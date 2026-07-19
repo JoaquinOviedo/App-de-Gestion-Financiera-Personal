@@ -227,9 +227,8 @@ export default function BudgetTab() {
                   ))}
                 </Pie>
                 <Tooltip 
-                  formatter={(value: number) => `$${value.toLocaleString()}`}
-                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '0.5rem' }}
-                  itemStyle={{ color: '#f8fafc' }}
+                  formatter={(value: any) => `$${value.toLocaleString()}`}
+                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '0.75rem', color: '#f8fafc' }}
                 />
               </PieChart>
             </ResponsiveContainer>

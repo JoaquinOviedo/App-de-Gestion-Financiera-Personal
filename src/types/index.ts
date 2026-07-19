@@ -31,15 +31,18 @@ export interface Operacion {
   nombre: string;
   icono_url: string;
   cantidad: number;
-  precio_operacion: number;
+  precio_operacion: number; // in USD
   fecha: string;
+  precio_unitario_ars?: number;
+  total_ars?: number;
+  origen?: string;
 }
 
 export interface Inversiones {
   operaciones: Operacion[];
 }
 
-export type OrigenHistorial = 'MANUAL' | 'AUTO_SNAPSHOT';
+export type OrigenHistorial = 'MANUAL' | 'AUTO_SNAPSHOT' | 'HISTORICO_AMCHARTS' | 'IMPORTADOR_BROKER';
 
 export interface RegistroHistorial {
   id: string;
@@ -49,6 +52,8 @@ export interface RegistroHistorial {
   total: number;
   origen: OrigenHistorial;
   nota?: string;
+  balance_usd?: number;
+  movimiento?: number;
 }
 
 export interface AppState {
@@ -75,4 +80,6 @@ export interface AppStore extends AppState {
   removeHistorial: (id: string) => void;
   checkAndCreateSnapshot: (currentInversionesValue: number) => void;
   importData: (data: AppState) => void;
+  importarHistorialAmCharts: (registros: RegistroHistorial[], reemplazarPrevios: boolean) => void;
+  importarOperacionesBroker: (operaciones: Operacion[], ingresos: number) => void;
 }

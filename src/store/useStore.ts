@@ -147,6 +147,34 @@ export const useStore = create<AppStore>()(
 
       importData: (data) => set(() => data),
 
+      importarHistorialAmCharts: (registros, reemplazarPrevios) => set((state) => {
+        let nuevoHistorial = [...state.historial_patrimonio];
+        
+        if (reemplazarPrevios) {
+          nuevoHistorial = nuevoHistorial.filter(r => r.origen !== 'HISTORICO_AMCHARTS');
+        }
+        
+        nuevoHistorial.push(...registros);
+        nuevoHistorial.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+        
+        return { historial_patrimonio: nuevoHistorial };
+      }),
+
+      importarOperacionesBroker: (operacionesNuevas, ingresosNuevos) => set((state) => {
+        const nuevasOperaciones = [...state.inversiones.operaciones, ...operacionesNuevas];
+        
+        return {
+          inversiones: {
+            ...state.inversiones,
+            operaciones: nuevasOperaciones
+          },
+          presupuesto: {
+            ...state.presupuesto,
+            asignacion_inversiones: state.presupuesto.asignacion_inversiones + ingresosNuevos
+          }
+        };
+      }),
+
     }),
     {
       name: 'finanzas_personales', // localStorage key

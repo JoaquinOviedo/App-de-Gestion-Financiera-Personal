@@ -15,10 +15,12 @@ export default function PortfolioTab() {
   const currentEmergenciaValue = fondo_emergencia.saldo_actual;
   
   const currentRecord = {
-    fecha: new Date().toISOString().split('T')[0] + ' (Hoy)',
+    fecha: new Date().toISOString().split('T')[0],
     valor_inversiones: currentInversionesValue,
     valor_emergencia: currentEmergenciaValue,
-    total: currentInversionesValue + currentEmergenciaValue
+    total: currentInversionesValue + currentEmergenciaValue,
+    id: 'current',
+    origen: 'AUTO_SNAPSHOT' as const
   };
 
   const chartData = [...historial_patrimonio]
@@ -156,7 +158,7 @@ export default function PortfolioTab() {
                   contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '0.75rem', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}
                   itemStyle={{ color: getChartColor(), fontWeight: 'bold' }}
                   labelStyle={{ color: '#94a3b8', marginBottom: '0.5rem' }}
-                  formatter={(value: number) => [`$${value.toLocaleString()}`, filter === 'TOTAL' ? 'Patrimonio Total' : (filter === 'INVERSIONES' ? 'Inversiones' : 'Fondo de Emergencia')]}
+                  formatter={(value: any) => [`$${value.toLocaleString()}`, filter === 'TOTAL' ? 'Patrimonio Total' : (filter === 'INVERSIONES' ? 'Inversiones' : 'Fondo de Emergencia')]}
                 />
                 <Area 
                   type="monotone" 

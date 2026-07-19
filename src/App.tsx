@@ -1,13 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { useStore } from './store/useStore';
-import { LayoutDashboard, History, LineChart, Wallet, Download, Upload } from 'lucide-react';
+import { LayoutDashboard, History, LineChart, Wallet, Download, Upload, FileText, BarChart } from 'lucide-react';
 import BudgetTab from './features/budget/BudgetTab';
 import HistoryTab from './features/history/HistoryTab';
 import PortfolioTab from './features/portfolio/PortfolioTab';
 import InvestmentsTab from './features/investments/InvestmentsTab';
+import AmChartsImporter from './components/AmChartsImporter';
+import BrokerImporter from './components/BrokerImporter';
 
 function App() {
   const [activeTab, setActiveTab] = useState('budget');
+  const [showAmChartsImporter, setShowAmChartsImporter] = useState(false);
+  const [showBrokerImporter, setShowBrokerImporter] = useState(false);
+  
   const checkAndCreateSnapshot = useStore(state => state.checkAndCreateSnapshot);
   const importData = useStore(state => state.importData);
   const inversiones = useStore(state => state.inversiones);
@@ -16,7 +21,7 @@ function App() {
   // WebSocket heartbeat and sync logic
   useEffect(() => {
     let ws: WebSocket;
-    let pingInterval: NodeJS.Timeout;
+    let pingInterval: ReturnType<typeof setInterval>;
 
     const connect = () => {
       ws = new WebSocket('ws://localhost:3001');
@@ -160,9 +165,26 @@ function App() {
 
             <div className="h-6 w-px bg-slate-800 mx-1"></div>
 
+            <button
+              onClick={() => setShowBrokerImporter(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-md text-slate-300 hover:text-white hover:bg-slate-800 transition-colors text-sm font-medium"
+            >
+              <FileText size={16} />
+              <span className="hidden sm:inline">Pegar Bróker</span>
+            </button>
+            <button
+              onClick={() => setShowAmChartsImporter(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-md text-slate-300 hover:text-white hover:bg-slate-800 transition-colors text-sm font-medium"
+            >
+              <BarChart size={16} />
+              <span className="hidden sm:inline">amCharts</span>
+            </button>
+
+            <div className="h-6 w-px bg-slate-800 mx-1"></div>
+
             <label className="cursor-pointer flex items-center gap-2 px-3 py-1.5 rounded-md text-slate-300 hover:text-white hover:bg-slate-800 transition-colors text-sm font-medium">
               <Upload size={16} />
-              <span className="hidden sm:inline">Importar</span>
+              <span className="hidden sm:inline">Importar JSON</span>
               <input type="file" accept=".json" className="hidden" onChange={handleImport} />
             </label>
             <button 
@@ -179,6 +201,9 @@ function App() {
       <main className="container mx-auto px-4 py-8">
         <ActiveComponent />
       </main>
+
+      {showAmChartsImporter && <AmChartsImporter onClose={() => setShowAmChartsImporter(false)} />}
+      {showBrokerImporter && <BrokerImporter onClose={() => setShowBrokerImporter(false)} />}
     </div>
   );
 }
