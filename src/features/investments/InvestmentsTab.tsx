@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
-import { Shield, Search, TrendingUp } from 'lucide-react';
+import { Shield, Search, Trash2, Edit2, Check, X } from 'lucide-react';
 import { fetchAssetPrice, AssetPrice } from '../../lib/api';
+import { getCedearRatio } from '../../lib/cedears';
 
 export default function InvestmentsTab() {
   const store = useStore();
@@ -23,6 +24,11 @@ export default function InvestmentsTab() {
   const [cantidad, setCantidad] = useState('');
   const [precioOp, setPrecioOp] = useState('');
   const [fechaOp, setFechaOp] = useState(new Date().toISOString().split('T')[0]);
+
+  // Inline editing state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editCantidad, setEditCantidad] = useState<number>(0);
+  const [editPrecio, setEditPrecio] = useState<number>(0);
 
   // Live prices
   const [livePrices, setLivePrices] = useState<Record<string, number>>({});
@@ -51,7 +57,8 @@ export default function InvestmentsTab() {
     const data = await fetchAssetPrice(ticker.toUpperCase());
     setSearchResult(data);
     if (data) {
-      setPrecioOp(data.price.toString());
+      const ratio = getCedearRatio(data.ticker, store.cedear_ratios);
+      setPrecioOp((data.price / ratio).toFixed(2));
     }
     setSearching(false);
   };
@@ -75,6 +82,20 @@ export default function InvestmentsTab() {
     setSearchResult(null);
     setCantidad('');
     setPrecioOp('');
+  };
+
+  const handleStartEdit = (opId: string, currentCantidad: number, currentPrecio: number) => {
+    setEditingId(opId);
+    setEditCantidad(currentCantidad);
+    setEditPrecio(currentPrecio);
+  };
+
+  const handleSaveEdit = (opId: string) => {
+    store.updateOperacion(opId, {
+      cantidad: editCantidad,
+      precio_operacion: editPrecio
+    });
+    setEditingId(null);
   };
 
   // Group operations by ticker to show current portfolio
@@ -117,93 +138,105 @@ export default function InvestmentsTab() {
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-400">Meta en Meses de Gasto (calculada del Presupuesto)</label>
+            <label className="text-sm font-medium text-slate-400">Meta en Meses de Gasto</label>
             <input 
               type="number"
               value={fondo_emergencia.meta_meses || ''}
               onChange={(e) => store.setFondoEmergencia(fondo_emergencia.saldo_actual, Number(e.target.value))}
               className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-yellow-500"
               placeholder="6"
-              min="1"
             />
           </div>
-          <div className="bg-slate-900/50 border border-slate-700 rounded-xl p-4 flex flex-col justify-center">
-            <div className="flex justify-between items-end mb-2">
-              <span className="text-sm font-medium text-slate-400">Meta: ${metaFondo.toLocaleString()}</span>
-              <span className="text-yellow-400 font-bold">{progresoFondo.toFixed(1)}%</span>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-400">Meta Calculada ($)</label>
+            <div className="text-xl font-bold text-slate-200 py-2">
+              ${metaFondo.toLocaleString()}
             </div>
-            <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
-              <div className="h-full bg-yellow-500 rounded-full transition-all duration-500" style={{ width: `${progresoFondo}%` }}></div>
-            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 relative z-10">
+          <div className="flex justify-between text-sm text-slate-400 mb-2">
+            <span>Progreso del Fondo</span>
+            <span>{progresoFondo.toFixed(1)}%</span>
+          </div>
+          <div className="w-full bg-slate-900/80 rounded-full h-3 overflow-hidden border border-slate-700/50">
+            <div 
+              className="bg-gradient-to-r from-yellow-500 to-amber-400 h-full rounded-full transition-all duration-500"
+              style={{ width: `${progresoFondo}%` }}
+            ></div>
           </div>
         </div>
       </div>
 
+      {/* Operaciones e Inversiones */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
-        {/* Nueva Operación */}
+        {/* Registrar Operación */}
         <div className="xl:col-span-4 bg-slate-800/50 rounded-2xl border border-slate-700/50 p-6 backdrop-blur-sm">
-          <h3 className="text-lg font-semibold text-slate-200 mb-6 flex items-center gap-2">
-            <TrendingUp size={20} className="text-blue-400" />
-            Nueva Operación
-          </h3>
-
-          <div className="flex gap-2 mb-6">
-            <input 
-              type="text"
-              value={ticker}
-              onChange={e => setTicker(e.target.value.toUpperCase())}
-              onKeyDown={e => e.key === 'Enter' && handleSearch()}
-              placeholder="Ticker (ej. AAPL, SPY, BTC-USD)"
-              className="flex-1 bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 uppercase"
-            />
-            <button 
-              onClick={handleSearch}
-              disabled={searching}
-              className="bg-slate-700 hover:bg-slate-600 text-white px-4 rounded-xl transition-colors flex items-center justify-center"
-            >
-              {searching ? '...' : <Search size={18} />}
-            </button>
+          <h3 className="text-lg font-semibold text-slate-200 mb-4">Registrar Operación</h3>
+          
+          <div className="space-y-4 mb-6">
+            <label className="text-sm font-medium text-slate-400">Buscar Activo (Ticker)</label>
+            <div className="flex gap-2">
+              <input 
+                type="text"
+                placeholder="Ej: SPY, AAPL, QQQ"
+                value={ticker}
+                onChange={e => setTicker(e.target.value.toUpperCase())}
+                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
+              />
+              <button 
+                onClick={handleSearch}
+                disabled={searching}
+                className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-xl transition-all font-medium flex items-center justify-center"
+              >
+                {searching ? '...' : <Search size={18} />}
+              </button>
+            </div>
           </div>
 
           {searchResult && (
-            <form onSubmit={handleAddOperation} className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
-              <div className="p-4 bg-slate-900/50 border border-blue-500/30 rounded-xl mb-4">
-                <p className="text-sm text-slate-400">Activo Encontrado:</p>
-                <p className="font-semibold text-white">{searchResult.name} ({searchResult.ticker})</p>
-                <p className="text-blue-400 font-medium">Precio Actual: ${searchResult.price} {searchResult.currency}</p>
+            <form onSubmit={handleAddOperation} className="space-y-4 border-t border-slate-700/50 pt-4">
+              <div className="p-3 bg-slate-900/50 rounded-xl border border-slate-700/50">
+                <div className="font-bold text-white">{searchResult.ticker}</div>
+                <div className="text-xs text-slate-400">{searchResult.name}</div>
+                <div className="text-sm font-semibold text-emerald-400 mt-1">
+                  Subyacente: ${searchResult.price} USD (Ratio {getCedearRatio(searchResult.ticker)}:1)
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <button
+              <div className="grid grid-cols-2 gap-2">
+                <button 
                   type="button"
                   onClick={() => setTipoOp('COMPRA')}
-                  className={`py-2 rounded-lg font-medium transition-colors ${tipoOp === 'COMPRA' ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}
+                  className={`py-2 text-sm font-semibold rounded-lg transition-all ${tipoOp === 'COMPRA' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-slate-900/50 text-slate-400'}`}
                 >
-                  COMPRA
+                  Compra
                 </button>
-                <button
+                <button 
                   type="button"
                   onClick={() => setTipoOp('VENTA')}
-                  className={`py-2 rounded-lg font-medium transition-colors ${tipoOp === 'VENTA' ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}
+                  className={`py-2 text-sm font-semibold rounded-lg transition-all ${tipoOp === 'VENTA' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-slate-900/50 text-slate-400'}`}
                 >
-                  VENTA
+                  Venta
                 </button>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-400">Cantidad (Nominales)</label>
+              <div>
+                <label className="text-xs font-medium text-slate-400 mb-1 block">Cantidad</label>
                 <input 
                   type="number"
                   step="any"
                   required
+                  placeholder="Ej: 10"
                   value={cantidad}
                   onChange={e => setCantidad(e.target.value)}
                   className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-400">Precio Operado (USD)</label>
+              <div>
+                <label className="text-xs font-medium text-slate-400 mb-1 block">Precio por Unidad/CEDEAR (USD)</label>
                 <input 
                   type="number"
                   step="any"
@@ -214,8 +247,8 @@ export default function InvestmentsTab() {
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-400">Fecha</label>
+              <div>
+                <label className="text-xs font-medium text-slate-400 mb-1 block">Fecha</label>
                 <input 
                   type="date"
                   required
@@ -238,7 +271,10 @@ export default function InvestmentsTab() {
         {/* Portafolio Actual */}
         <div className="xl:col-span-8 bg-slate-800/50 rounded-2xl border border-slate-700/50 overflow-hidden backdrop-blur-sm">
           <div className="p-6 border-b border-slate-700/50 flex justify-between items-center">
-            <h3 className="text-lg font-semibold text-slate-200">Portafolio Activo</h3>
+            <div>
+              <h3 className="text-lg font-semibold text-slate-200">Portafolio Activo</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Saldos consolidado por activo (Ajustado por Ratio CEDEAR)</p>
+            </div>
             {lastUpdate && (
               <span className="text-xs text-slate-400">Precios actualizados: {lastUpdate.toLocaleTimeString()}</span>
             )}
@@ -249,6 +285,7 @@ export default function InvestmentsTab() {
               <thead>
                 <tr className="bg-slate-900/30 text-slate-400 text-sm">
                   <th className="px-6 py-3 font-medium">Activo</th>
+                  <th className="px-6 py-3 font-medium text-center">Ratio</th>
                   <th className="px-6 py-3 font-medium text-right">Cantidad</th>
                   <th className="px-6 py-3 font-medium text-right">Precio Prom.</th>
                   <th className="px-6 py-3 font-medium text-right">Precio Actual</th>
@@ -258,14 +295,17 @@ export default function InvestmentsTab() {
               <tbody className="divide-y divide-slate-700/50">
                 {portfolioArray.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
-                      Tu portafolio está vacío. Realiza una compra para empezar.
+                    <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                      Tu portafolio está vacío. Realiza una compra o importa tu cartera para empezar.
                     </td>
                   </tr>
                 ) : (
                   portfolioArray.map(item => {
+                    const ratio = getCedearRatio(item.ticker, store.cedear_ratios);
                     const avgPrice = item.costoTotal / item.cantidad;
-                    const currentPrice = livePrices[item.ticker] || avgPrice; 
+                    // Adjust raw Yahoo Finance live price by CEDEAR ratio if available
+                    const rawLivePrice = livePrices[item.ticker];
+                    const currentPrice = rawLivePrice ? (rawLivePrice / ratio) : avgPrice; 
                     const currentValue = item.cantidad * currentPrice;
                     const pnl = currentValue - item.costoTotal;
                     const pnlPct = item.costoTotal > 0 ? (pnl / item.costoTotal) * 100 : 0;
@@ -276,6 +316,11 @@ export default function InvestmentsTab() {
                         <td className="px-6 py-4">
                           <div className="font-bold text-slate-200">{item.ticker}</div>
                           <div className="text-xs text-slate-400 truncate max-w-[150px]">{item.name}</div>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className="px-2 py-0.5 bg-blue-500/10 text-blue-400 rounded text-xs border border-blue-500/20 font-mono">
+                            {ratio}:1
+                          </span>
                         </td>
                         <td className="px-6 py-4 text-right text-slate-300 font-medium">
                           {item.cantidad.toLocaleString(undefined, { maximumFractionDigits: 4 })}
@@ -300,6 +345,111 @@ export default function InvestmentsTab() {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Operations List with Delete / Edit */}
+          <div className="p-6 border-t border-slate-700/50 bg-slate-900/40">
+            <h4 className="text-md font-semibold text-slate-300 mb-4">Detalle de Operaciones (Edición / Eliminación)</h4>
+            {inversiones.operaciones.length === 0 ? (
+              <p className="text-sm text-slate-500">No hay operaciones registradas.</p>
+            ) : (
+              <div className="overflow-x-auto max-h-60">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="text-slate-400 border-b border-slate-700/50">
+                      <th className="py-2 px-3">Fecha</th>
+                      <th className="py-2 px-3">Tipo</th>
+                      <th className="py-2 px-3">Ticker</th>
+                      <th className="py-2 px-3 text-right">Cantidad</th>
+                      <th className="py-2 px-3 text-right">Precio USD</th>
+                      <th className="py-2 px-3 text-center">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {inversiones.operaciones.map((op) => {
+                      const isEditing = editingId === op.id;
+                      return (
+                        <tr key={op.id} className="hover:bg-slate-800/50">
+                          <td className="py-2 px-3 text-slate-300">{op.fecha}</td>
+                          <td className="py-2 px-3">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${op.tipo === 'COMPRA' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                              {op.tipo}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 font-bold text-white">{op.ticker}</td>
+                          
+                          <td className="py-2 px-3 text-right">
+                            {isEditing ? (
+                              <input
+                                type="number"
+                                step="any"
+                                className="w-20 bg-slate-900 border border-slate-600 rounded px-1 text-right text-white"
+                                value={editCantidad}
+                                onChange={(e) => setEditCantidad(parseFloat(e.target.value) || 0)}
+                              />
+                            ) : (
+                              op.cantidad
+                            )}
+                          </td>
+
+                          <td className="py-2 px-3 text-right text-emerald-400">
+                            {isEditing ? (
+                              <input
+                                type="number"
+                                step="any"
+                                className="w-20 bg-slate-900 border border-slate-600 rounded px-1 text-right text-emerald-400"
+                                value={editPrecio}
+                                onChange={(e) => setEditPrecio(parseFloat(e.target.value) || 0)}
+                              />
+                            ) : (
+                              `$${op.precio_operacion.toFixed(2)}`
+                            )}
+                          </td>
+
+                          <td className="py-2 px-3 text-center">
+                            {isEditing ? (
+                              <div className="flex justify-center gap-1">
+                                <button
+                                  onClick={() => handleSaveEdit(op.id)}
+                                  className="p-1 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded"
+                                  title="Guardar"
+                                >
+                                  <Check size={14} />
+                                </button>
+                                <button
+                                  onClick={() => setEditingId(null)}
+                                  className="p-1 bg-slate-700 text-slate-300 hover:bg-slate-600 rounded"
+                                  title="Cancelar"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex justify-center gap-1">
+                                <button
+                                  onClick={() => handleStartEdit(op.id, op.cantidad, op.precio_operacion)}
+                                  className="p-1 text-blue-400 hover:bg-blue-500/10 rounded"
+                                  title="Editar"
+                                >
+                                  <Edit2 size={14} />
+                                </button>
+                                <button
+                                  onClick={() => store.removeOperacion(op.id)}
+                                  className="p-1 text-red-400 hover:bg-red-500/10 rounded"
+                                  title="Eliminar"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       </div>

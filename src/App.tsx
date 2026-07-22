@@ -7,11 +7,16 @@ import PortfolioTab from './features/portfolio/PortfolioTab';
 import InvestmentsTab from './features/investments/InvestmentsTab';
 import AmChartsImporter from './components/AmChartsImporter';
 import BrokerImporter from './components/BrokerImporter';
+import CurrentPortfolioImporter from './components/CurrentPortfolioImporter';
+import CedearRatioImporter from './components/CedearRatioImporter';
+import { Briefcase, Percent } from 'lucide-react';
 
 function App() {
   const [activeTab, setActiveTab] = useState('budget');
   const [showAmChartsImporter, setShowAmChartsImporter] = useState(false);
   const [showBrokerImporter, setShowBrokerImporter] = useState(false);
+  const [showCurrentPortfolioImporter, setShowCurrentPortfolioImporter] = useState(false);
+  const [showCedearRatioImporter, setShowCedearRatioImporter] = useState(false);
   
   const checkAndCreateSnapshot = useStore(state => state.checkAndCreateSnapshot);
   const importData = useStore(state => state.importData);
@@ -63,7 +68,8 @@ function App() {
             presupuesto: estadoCompleto.presupuesto,
             fondo_emergencia: estadoCompleto.fondo_emergencia,
             inversiones: estadoCompleto.inversiones,
-            historial_patrimonio: estadoCompleto.historial_patrimonio
+            historial_patrimonio: estadoCompleto.historial_patrimonio,
+            cedear_ratios: estadoCompleto.cedear_ratios
           }
         }));
         // Cerrar conexión después de enviar
@@ -166,12 +172,31 @@ function App() {
             <div className="h-6 w-px bg-slate-800 mx-1"></div>
 
             <button
+              onClick={() => setShowCurrentPortfolioImporter(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 transition-colors text-sm font-medium border border-emerald-500/30"
+              title="Importar posiciones actuales de Mis Inversiones"
+            >
+              <Briefcase size={16} />
+              <span className="hidden sm:inline">Mis Inversiones</span>
+            </button>
+
+            <button
+              onClick={() => setShowCedearRatioImporter(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-md text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 transition-colors text-sm font-medium border border-purple-500/30"
+              title="Cargar CSV de ratios CEDEAR"
+            >
+              <Percent size={16} />
+              <span className="hidden sm:inline">Ratios CEDEAR</span>
+            </button>
+
+            <button
               onClick={() => setShowBrokerImporter(true)}
               className="flex items-center gap-2 px-3 py-1.5 rounded-md text-slate-300 hover:text-white hover:bg-slate-800 transition-colors text-sm font-medium"
             >
               <FileText size={16} />
               <span className="hidden sm:inline">Pegar Bróker</span>
             </button>
+
             <button
               onClick={() => setShowAmChartsImporter(true)}
               className="flex items-center gap-2 px-3 py-1.5 rounded-md text-slate-300 hover:text-white hover:bg-slate-800 transition-colors text-sm font-medium"
@@ -204,6 +229,8 @@ function App() {
 
       {showAmChartsImporter && <AmChartsImporter onClose={() => setShowAmChartsImporter(false)} />}
       {showBrokerImporter && <BrokerImporter onClose={() => setShowBrokerImporter(false)} />}
+      {showCurrentPortfolioImporter && <CurrentPortfolioImporter onClose={() => setShowCurrentPortfolioImporter(false)} />}
+      {showCedearRatioImporter && <CedearRatioImporter onClose={() => setShowCedearRatioImporter(false)} />}
     </div>
   );
 }

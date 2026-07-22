@@ -5,7 +5,7 @@ import { RegistroHistorial } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AmChartsData {
-  date: number;
+  date: number | string;
   totalMovement: number;
   totalBalanceUSD: number;
 }
@@ -61,18 +61,28 @@ export default function AmChartsImporter({ onClose }: Props) {
 
   const processAmChartsData = (data: AmChartsData[]) => {
     let errors = 0;
-    const validData = data.filter(item => {
-      if (item.totalBalanceUSD > 100000) {
-        errors++;
-        return false;
-      }
-      return true;
-    });
+    const normalizedData = data
+      .filter(item => {
+        if (!item || typeof item.totalBalanceUSD !== 'number') {
+          errors++;
+          return false;
+        }
+        if (item.totalBalanceUSD > 100000) {
+          errors++;
+          return false;
+        }
+        return true;
+      })
+      .map(item => ({
+        ...item,
+        timestamp: new Date(item.date).getTime()
+      }))
+      .filter(item => !isNaN(item.timestamp));
 
-    const groupedByWeek: Record<string, AmChartsData[]> = {};
+    const groupedByWeek: Record<string, typeof normalizedData> = {};
 
-    validData.forEach(item => {
-      const date = new Date(item.date);
+    normalizedData.forEach(item => {
+      const date = new Date(item.timestamp);
       const week = getISOWeek(date);
       if (!groupedByWeek[week]) groupedByWeek[week] = [];
       groupedByWeek[week].push(item);
@@ -81,8 +91,9 @@ export default function AmChartsImporter({ onClose }: Props) {
     const processed: ProcessedWeek[] = Object.keys(groupedByWeek).map(week => {
       const group = groupedByWeek[week];
       const sumUsd = group.reduce((acc, curr) => acc + curr.totalBalanceUSD, 0);
-      const sumMovement = group.reduce((acc, curr) => acc + curr.totalMovement, 0);
-      const maxDate = new Date(Math.max(...group.map(i => i.date)));
+      const sumMovement = group.reduce((acc, curr) => acc + (curr.totalMovement || 0), 0);
+      const maxTimestamp = Math.max(...group.map(i => i.timestamp));
+      const maxDate = new Date(maxTimestamp);
 
       return {
         isoWeek: week,

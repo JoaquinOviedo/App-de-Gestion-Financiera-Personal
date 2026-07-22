@@ -62,6 +62,7 @@ export interface AppState {
   fondo_emergencia: FondoEmergencia;
   inversiones: Inversiones;
   historial_patrimonio: RegistroHistorial[];
+  cedear_ratios?: Record<string, number>;
 }
 
 export interface AppStore extends AppState {
@@ -82,4 +83,7 @@ export interface AppStore extends AppState {
   importData: (data: AppState) => void;
   importarHistorialAmCharts: (registros: RegistroHistorial[], reemplazarPrevios: boolean) => void;
   importarOperacionesBroker: (operaciones: Operacion[], ingresos: number) => void;
+  reemplazarPortafolioActual: (operaciones: Operacion[]) => void;
+  updateOperacion: (id: string, data: Partial<Operacion>) => void;
+  setCedearRatios: (ratios: Record<string, number>) => void;
 }

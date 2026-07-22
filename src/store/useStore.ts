@@ -175,6 +175,29 @@ export const useStore = create<AppStore>()(
         };
       }),
 
+      reemplazarPortafolioActual: (operaciones) => set((state) => ({
+        inversiones: {
+          ...state.inversiones,
+          operaciones
+        }
+      })),
+
+      updateOperacion: (id, data) => set((state) => ({
+        inversiones: {
+          ...state.inversiones,
+          operaciones: state.inversiones.operaciones.map(op => op.id === id ? { ...op, ...data } : op)
+        }
+      })),
+
+      cedear_ratios: {},
+
+      setCedearRatios: (ratios) => set((state) => ({
+        cedear_ratios: {
+          ...(state.cedear_ratios || {}),
+          ...ratios
+        }
+      })),
+
     }),
     {
       name: 'finanzas_personales', // localStorage key
