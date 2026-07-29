@@ -7,11 +7,13 @@ const initialState: AppState = {
   presupuesto: {
     ingreso_mensual: 0,
     categorias: [],
-    asignacion_inversiones: 0
+    asignacion_inversiones: 0,
+    moneda: 'ARS'
   },
   fondo_emergencia: {
     saldo_actual: 0,
-    meta_meses: 6
+    meta_meses: 6,
+    moneda: 'ARS'
   },
   inversiones: {
     operaciones: []
@@ -29,6 +31,9 @@ export const useStore = create<AppStore>()(
         
       setAsignacionInversiones: (monto) =>
         set((state) => ({ presupuesto: { ...state.presupuesto, asignacion_inversiones: monto } })),
+
+      setPresupuestoMoneda: (moneda) =>
+        set((state) => ({ presupuesto: { ...state.presupuesto, moneda } })),
 
       addCategoria: (categoria) =>
         set((state) => ({ presupuesto: { ...state.presupuesto, categorias: [...state.presupuesto.categorias, categoria] } })),
@@ -85,8 +90,8 @@ export const useStore = create<AppStore>()(
           }
         })),
 
-      setFondoEmergencia: (saldo, metaMeses) =>
-        set(() => ({ fondo_emergencia: { saldo_actual: saldo, meta_meses: metaMeses } })),
+      setFondoEmergencia: (saldo, metaMeses, moneda) =>
+        set((state) => ({ fondo_emergencia: { saldo_actual: saldo, meta_meses: metaMeses, moneda: moneda || state.fondo_emergencia.moneda || 'ARS' } })),
 
       addOperacion: (op) =>
         set((state) => ({

@@ -48,12 +48,73 @@ export default function BrokerImporter({ onClose }: Props) {
     const flujosParsed: FlujoInfo[] = [];
     const opsParsed: OperacionInfo[] = [];
 
+    // Detect if the input is tab-delimited by checking for tabs in lines
+    const hasTabDelimitedLines = lineas.some(l => l.includes('\t'));
+
     lineas.forEach(line => {
       const lineTrimmed = line.trim();
-      if (!lineTrimmed || /^liquida/i.test(lineTrimmed) || /^operado/i.test(lineTrimmed)) {
-        return; // Ignore table header line
+      if (!lineTrimmed) return;
+
+      // Skip header rows (Liquida, Operado, Comprobante, etc.)
+      if (/^liquida\t/i.test(lineTrimmed) || /^liquida\s+operado/i.test(lineTrimmed) || /^operado/i.test(lineTrimmed)) {
+        return;
       }
 
+      // ---- TAB-DELIMITED FORMAT ----
+      // Columns: Liquida | Operado | Comprobante | Numero | Cantidad | Especie | Precio | Importe | Saldo | Referencia
+      // Index:   0       | 1       | 2           | 3      | 4        | 5       | 6      | 7       | 8     | 9
+      if (hasTabDelimitedLines && lineTrimmed.includes('\t')) {
+        const cols = lineTrimmed.split('\t');
+
+        // Extract operation date (Operado column, index 1) or Liquida (index 0)
+        let fecha = new Date().toISOString().split('T')[0];
+        const rawDate = (cols[1] || cols[0] || '').trim();
+        const dateMatch = rawDate.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+        if (dateMatch) {
+          fecha = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
+        }
+
+        const comprobante = (cols[2] || '').trim().toUpperCase();
+
+        // Cash flow entries (RECIBO DE COBRO, DEPOSITO, etc.)
+        const isCashFlow = /(RECIBO DE COBRO|DEPOSITO|INGRESO|TRANSFERENCIA|CREDITO)/i.test(comprobante);
+        const isAssetOp = /(COMPRA|VENTA)/i.test(comprobante);
+
+        if (isCashFlow) {
+          // For cash flows, the amount is usually in the Importe column (index 7)
+          const importeStr = (cols[7] || '').trim();
+          const amount = Math.abs(parseNumber(importeStr));
+          if (amount > 0) {
+            const isRetiro = parseNumber(importeStr) < 0 || /(RETIRO|EXTRACCION|DEBITO)/i.test(comprobante);
+            flujosParsed.push({
+              fecha,
+              concepto: comprobante || 'RECIBO DE COBRO / DEPOSITO',
+              monto: amount,
+              tipo: isRetiro ? 'RETIRO' : 'INGRESO'
+            });
+          }
+        } else if (isAssetOp) {
+          const tipoOp: TipoOperacion = /VENTA/i.test(comprobante) ? 'VENTA' : 'COMPRA';
+          const cantidad = parseInt(cols[4] || '0', 10) || 0;
+          const ticker = (cols[5] || '').trim().toUpperCase();
+          const precioUnitarioArs = Math.abs(parseNumber(cols[6] || ''));
+          const totalArs = Math.abs(parseNumber(cols[7] || ''));
+
+          if (ticker && (precioUnitarioArs > 0 || totalArs > 0)) {
+            opsParsed.push({
+              fecha,
+              tipo: tipoOp,
+              ticker,
+              cantidad: cantidad || (totalArs > 0 && precioUnitarioArs > 0 ? Math.round(totalArs / precioUnitarioArs) : 1),
+              precioUnitarioArs,
+              totalArs: totalArs || (cantidad * precioUnitarioArs)
+            });
+          }
+        }
+        return; // Processed as tab-delimited, skip the fallback
+      }
+
+      // ---- CONCATENATED / NON-TAB FORMAT (fallback) ----
       // Extract dates (e.g., 06/07/2026 03/07/2026 or 06/07/202603/07/2026)
       const dateMatches = lineTrimmed.match(/\d{2}\/\d{2}\/\d{4}/g);
       let fecha = new Date().toISOString().split('T')[0];
@@ -63,16 +124,19 @@ export default function BrokerImporter({ onClose }: Props) {
         fecha = `${year}-${month}-${day}`;
       }
 
-      // Check for Cash Flow vs Asset Operation
       const isCashFlow = /(RECIBO DE COBRO|DEPOSITO|INGRESO|TRANSFERENCIA|CREDITO)/i.test(lineTrimmed);
       const isAssetOp = /(COMPRA|VENTA)/i.test(lineTrimmed);
 
       if (isCashFlow) {
-        // Extract amounts with dollar sign or formatted numbers
-        const amounts = lineTrimmed.match(/\$?\s*([\d.]+,\d{2})/g) || lineTrimmed.match(/\$([\d.,]+)/g);
+        const amounts = lineTrimmed.match(/\$\s*-?[\d.]+,\d{2}/g);
         let amount = 0;
         if (amounts && amounts.length > 0) {
-          amount = Math.abs(parseNumber(amounts[0]));
+          // Find the positive amount (the actual credit/debit)
+          for (const a of amounts) {
+            const val = parseNumber(a);
+            if (val > 0) { amount = val; break; }
+          }
+          if (amount === 0) amount = Math.abs(parseNumber(amounts[0]));
         }
         if (amount > 0) {
           flujosParsed.push({
@@ -85,54 +149,17 @@ export default function BrokerImporter({ onClose }: Props) {
       } else if (isAssetOp) {
         const tipoOp: TipoOperacion = /VENTA/i.test(lineTrimmed) ? 'VENTA' : 'COMPRA';
         
-        let ticker = '';
-        let cantidad = 0;
-        let precioUnitarioArs = 0;
-        let totalArs = 0;
-
-        // Try tab/multi-space split first for tabular data
-        const parts = lineTrimmed.split(/\t+|\s{2,}/).map(p => p.trim()).filter(p => p.length > 0);
+        // Try to find ticker + price pattern in concatenated text
+        // Pattern: TICKER $PRICE $TOTAL or CANTIDAD TICKER $PRICE $TOTAL
+        const fullRegex = /(\d+)\s*([A-Z]{2,6})\s*\$\s*([\d.]+,\d{2})\s*\$\s*(-?[\d.]+,\d{2})/i;
+        const match = lineTrimmed.match(fullRegex);
         
-        if (parts.length >= 5) {
-          // Find ticker index: uppercase word 2-6 chars, not pure digits
-          const tickerIdx = parts.findIndex((p, idx) => idx >= 2 && /^[A-Z0-9]{2,6}$/i.test(p) && !/^\d+$/.test(p));
-          if (tickerIdx !== -1) {
-            ticker = parts[tickerIdx].toUpperCase();
+        if (match) {
+          const cantidad = parseInt(match[1], 10);
+          const ticker = match[2].toUpperCase();
+          const precioUnitarioArs = Math.abs(parseNumber(match[3]));
+          const totalArs = Math.abs(parseNumber(match[4]));
 
-            // Quantity is typically the column right before ticker
-            if (tickerIdx > 0 && /^\d+$/.test(parts[tickerIdx - 1])) {
-              cantidad = parseInt(parts[tickerIdx - 1], 10);
-            }
-
-            // Unit Price is after ticker
-            if (parts.length > tickerIdx + 1) {
-              precioUnitarioArs = Math.abs(parseNumber(parts[tickerIdx + 1]));
-            }
-
-            // Total Import is after unit price
-            if (parts.length > tickerIdx + 2) {
-              totalArs = Math.abs(parseNumber(parts[tickerIdx + 2]));
-            }
-          }
-        }
-
-        // Fallback to RegEx if tabular parsing did not resolve ticker or price
-        if (!ticker || precioUnitarioArs === 0) {
-          const regex = /([A-Z0-9]{2,6})\s*\$?\s*([\d.]+,\d{2})\s*\$?\s*(-?[\d.]+,\d{2})/i;
-          const match = lineTrimmed.match(regex);
-          if (match) {
-            ticker = match[1].toUpperCase();
-            precioUnitarioArs = Math.abs(parseNumber(match[2]));
-            totalArs = Math.abs(parseNumber(match[3]));
-          }
-        }
-
-        // Calculate quantity if missing
-        if (cantidad <= 0 && precioUnitarioArs > 0 && totalArs > 0) {
-          cantidad = Math.round(totalArs / precioUnitarioArs);
-        }
-
-        if (ticker && (precioUnitarioArs > 0 || totalArs > 0)) {
           opsParsed.push({
             fecha,
             tipo: tipoOp,
@@ -141,6 +168,25 @@ export default function BrokerImporter({ onClose }: Props) {
             precioUnitarioArs,
             totalArs: totalArs || (cantidad * precioUnitarioArs)
           });
+        } else {
+          // Fallback: find ticker as isolated uppercase word, then prices
+          const tickerMatch = lineTrimmed.match(/\b([A-Z]{2,6})\b/);
+          const priceMatches = lineTrimmed.match(/\$\s*-?[\d.]+,\d{2}/g);
+          if (tickerMatch && priceMatches && priceMatches.length >= 2) {
+            const ticker = tickerMatch[1];
+            const precioUnitarioArs = Math.abs(parseNumber(priceMatches[0]));
+            const totalArs = Math.abs(parseNumber(priceMatches[1]));
+            const cantidad = precioUnitarioArs > 0 ? Math.round(totalArs / precioUnitarioArs) : 1;
+
+            opsParsed.push({
+              fecha,
+              tipo: tipoOp,
+              ticker,
+              cantidad: cantidad || 1,
+              precioUnitarioArs,
+              totalArs
+            });
+          }
         }
       }
     });

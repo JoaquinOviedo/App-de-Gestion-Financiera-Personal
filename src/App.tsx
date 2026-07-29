@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useStore } from './store/useStore';
-import { LayoutDashboard, History, LineChart, Wallet, Download, Upload, FileText, BarChart } from 'lucide-react';
+import { LayoutDashboard, History, LineChart, Wallet, Settings } from 'lucide-react';
 import BudgetTab from './features/budget/BudgetTab';
 import HistoryTab from './features/history/HistoryTab';
 import PortfolioTab from './features/portfolio/PortfolioTab';
@@ -9,10 +9,11 @@ import AmChartsImporter from './components/AmChartsImporter';
 import BrokerImporter from './components/BrokerImporter';
 import CurrentPortfolioImporter from './components/CurrentPortfolioImporter';
 import CedearRatioImporter from './components/CedearRatioImporter';
-import { Briefcase, Percent } from 'lucide-react';
+import AdminModal from './components/AdminModal';
 
 function App() {
   const [activeTab, setActiveTab] = useState('budget');
+  const [showAdminModal, setShowAdminModal] = useState(false);
   const [showAmChartsImporter, setShowAmChartsImporter] = useState(false);
   const [showBrokerImporter, setShowBrokerImporter] = useState(false);
   const [showCurrentPortfolioImporter, setShowCurrentPortfolioImporter] = useState(false);
@@ -135,7 +136,7 @@ function App() {
               F
             </div>
             <span className="font-bold text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400">
-              FintechLocal
+              App de gestion financiera
             </span>
           </div>
           
@@ -161,63 +162,13 @@ function App() {
           </nav>
 
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 text-sm font-medium border border-emerald-500/20">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              Mercado Online
-            </div>
-
-            <div className="h-6 w-px bg-slate-800 mx-1"></div>
-
             <button
-              onClick={() => setShowCurrentPortfolioImporter(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 transition-colors text-sm font-medium border border-emerald-500/30"
-              title="Importar posiciones actuales de Mis Inversiones"
+              onClick={() => setShowAdminModal(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition-all text-sm font-medium shadow-lg shadow-indigo-500/20"
+              title="Panel de Administración"
             >
-              <Briefcase size={16} />
-              <span className="hidden sm:inline">Mis Inversiones</span>
-            </button>
-
-            <button
-              onClick={() => setShowCedearRatioImporter(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-md text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 transition-colors text-sm font-medium border border-purple-500/30"
-              title="Cargar CSV de ratios CEDEAR"
-            >
-              <Percent size={16} />
-              <span className="hidden sm:inline">Ratios CEDEAR</span>
-            </button>
-
-            <button
-              onClick={() => setShowBrokerImporter(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-md text-slate-300 hover:text-white hover:bg-slate-800 transition-colors text-sm font-medium"
-            >
-              <FileText size={16} />
-              <span className="hidden sm:inline">Pegar Bróker</span>
-            </button>
-
-            <button
-              onClick={() => setShowAmChartsImporter(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-md text-slate-300 hover:text-white hover:bg-slate-800 transition-colors text-sm font-medium"
-            >
-              <BarChart size={16} />
-              <span className="hidden sm:inline">amCharts</span>
-            </button>
-
-            <div className="h-6 w-px bg-slate-800 mx-1"></div>
-
-            <label className="cursor-pointer flex items-center gap-2 px-3 py-1.5 rounded-md text-slate-300 hover:text-white hover:bg-slate-800 transition-colors text-sm font-medium">
-              <Upload size={16} />
-              <span className="hidden sm:inline">Importar JSON</span>
-              <input type="file" accept=".json" className="hidden" onChange={handleImport} />
-            </label>
-            <button 
-              onClick={handleExport}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white transition-colors text-sm font-medium shadow-lg shadow-indigo-500/20"
-            >
-              <Download size={16} />
-              <span className="hidden sm:inline">Exportar JSON</span>
+              <Settings size={18} />
+              <span>Administración</span>
             </button>
           </div>
         </div>
@@ -226,6 +177,18 @@ function App() {
       <main className="container mx-auto px-4 py-8">
         <ActiveComponent />
       </main>
+
+      {showAdminModal && (
+        <AdminModal
+          onClose={() => setShowAdminModal(false)}
+          onOpenAmCharts={() => setShowAmChartsImporter(true)}
+          onOpenBroker={() => setShowBrokerImporter(true)}
+          onOpenCurrentPortfolio={() => setShowCurrentPortfolioImporter(true)}
+          onOpenCedearRatios={() => setShowCedearRatioImporter(true)}
+          onExportJson={handleExport}
+          onImportJson={handleImport}
+        />
+      )}
 
       {showAmChartsImporter && <AmChartsImporter onClose={() => setShowAmChartsImporter(false)} />}
       {showBrokerImporter && <BrokerImporter onClose={() => setShowBrokerImporter(false)} />}

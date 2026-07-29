@@ -73,10 +73,19 @@ export default function AmChartsImporter({ onClose }: Props) {
         }
         return true;
       })
-      .map(item => ({
-        ...item,
-        timestamp: new Date(item.date).getTime()
-      }))
+      .map(item => {
+        // Handle both numeric timestamps and ISO date strings (e.g. "2024-05-01T00:00:00-03:00")
+        let timestamp: number;
+        if (typeof item.date === 'number') {
+          timestamp = item.date;
+        } else {
+          timestamp = new Date(item.date).getTime();
+        }
+        return {
+          ...item,
+          timestamp
+        };
+      })
       .filter(item => !isNaN(item.timestamp));
 
     const groupedByWeek: Record<string, typeof normalizedData> = {};

@@ -1,18 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
-import { Shield, Search, Trash2, Edit2, Check, X } from 'lucide-react';
+import { Shield, Search, Trash2, Edit2, Check, X, RefreshCw } from 'lucide-react';
 import { fetchAssetPrice, AssetPrice } from '../../lib/api';
 import { getCedearRatio } from '../../lib/cedears';
+import { useDolarMEP } from '../../lib/useDolarMEP';
 
 export default function InvestmentsTab() {
   const store = useStore();
   const { fondo_emergencia, presupuesto, inversiones } = store;
+  const { cotizacion: cotizacionMEP, loading: loadingMEP, refresh: refreshMEP } = useDolarMEP();
+
+  const monedaFondo = fondo_emergencia.moneda || 'ARS';
 
   // Fondo Emergencia
   const gastosMensualesFijos = presupuesto.categorias.reduce((acc, cat) => {
     return acc + cat.subgastos.reduce((subAcc, sub) => subAcc + (sub.costo_unitario * sub.frecuencia), 0);
   }, 0);
-  const metaFondo = gastosMensualesFijos * fondo_emergencia.meta_meses;
+
+  // Convert expenses to match fondo_emergencia currency for progress calculation
+  const gastosMensualesMonedaFondo = (presupuesto.moneda || 'ARS') === monedaFondo
+    ? gastosMensualesFijos
+    : (monedaFondo === 'USD' && cotizacionMEP > 0
+        ? gastosMensualesFijos / cotizacionMEP
+        : gastosMensualesFijos * cotizacionMEP);
+
+  const metaFondo = gastosMensualesMonedaFondo * fondo_emergencia.meta_meses;
   const progresoFondo = metaFondo > 0 ? Math.min((fondo_emergencia.saldo_actual / metaFondo) * 100, 100) : 0;
 
   // Inversiones
@@ -116,41 +128,78 @@ export default function InvestmentsTab() {
 
   const portfolioArray = Object.values(portfolio).filter(p => p.cantidad > 0);
 
+  // Compute total portfolio values
+  const totalPortfolioValueUSD = portfolioArray.reduce((acc, item) => {
+    const ratio = getCedearRatio(item.ticker, store.cedear_ratios);
+    const avgPrice = item.costoTotal / item.cantidad;
+    const rawLivePrice = livePrices[item.ticker];
+    const currentPrice = rawLivePrice ? (rawLivePrice / ratio) : avgPrice;
+    return acc + (item.cantidad * currentPrice);
+  }, 0);
+
+  const totalPortfolioCostoUSD = portfolioArray.reduce((acc, item) => acc + item.costoTotal, 0);
+  const totalPnLUSD = totalPortfolioValueUSD - totalPortfolioCostoUSD;
+
   return (
     <div className="space-y-8">
       {/* Fondo de Emergencia */}
       <div className="bg-slate-800/50 rounded-2xl border border-yellow-500/30 p-6 backdrop-blur-sm relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-yellow-500/5 blur-3xl rounded-full"></div>
-        <div className="flex items-center gap-3 mb-6 relative z-10">
-          <Shield className="text-yellow-400" size={24} />
-          <h3 className="text-xl font-semibold text-slate-200">Fondo de Emergencia</h3>
+        <div className="flex items-center justify-between mb-6 relative z-10">
+          <div className="flex items-center gap-3">
+            <Shield className="text-yellow-400" size={24} />
+            <h3 className="text-xl font-semibold text-slate-200">Fondo de Emergencia</h3>
+          </div>
+          {/* Currency Switcher */}
+          <div className="flex items-center gap-2 bg-slate-900/60 p-1 rounded-xl border border-slate-700/50">
+            <button
+              onClick={() => store.setFondoEmergencia(fondo_emergencia.saldo_actual, fondo_emergencia.meta_meses, 'ARS')}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${monedaFondo === 'ARS' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              ARS ($)
+            </button>
+            <button
+              onClick={() => store.setFondoEmergencia(fondo_emergencia.saldo_actual, fondo_emergencia.meta_meses, 'USD')}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${monedaFondo === 'USD' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              USD (US$)
+            </button>
+          </div>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10">
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-400">Saldo Actual ($)</label>
+            <label className="text-sm font-medium text-slate-400">Saldo Actual ({monedaFondo === 'USD' ? 'US$' : '$'})</label>
             <input 
               type="number"
               value={fondo_emergencia.saldo_actual || ''}
-              onChange={(e) => store.setFondoEmergencia(Number(e.target.value), fondo_emergencia.meta_meses)}
+              onChange={(e) => store.setFondoEmergencia(Number(e.target.value), fondo_emergencia.meta_meses, monedaFondo)}
               className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-yellow-500"
               placeholder="0.00"
             />
+            {cotizacionMEP > 0 && (
+              <p className="text-xs text-slate-400">
+                {monedaFondo === 'ARS'
+                  ? `≈ US$ ${(fondo_emergencia.saldo_actual / cotizacionMEP).toFixed(2)} USD (MEP: $${cotizacionMEP.toFixed(2)})`
+                  : `≈ $ ${(fondo_emergencia.saldo_actual * cotizacionMEP).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS (MEP: $${cotizacionMEP.toFixed(2)})`
+                }
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium text-slate-400">Meta en Meses de Gasto</label>
             <input 
               type="number"
               value={fondo_emergencia.meta_meses || ''}
-              onChange={(e) => store.setFondoEmergencia(fondo_emergencia.saldo_actual, Number(e.target.value))}
+              onChange={(e) => store.setFondoEmergencia(fondo_emergencia.saldo_actual, Number(e.target.value), monedaFondo)}
               className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-yellow-500"
               placeholder="6"
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-400">Meta Calculada ($)</label>
+            <label className="text-sm font-medium text-slate-400">Meta Calculada ({monedaFondo === 'USD' ? 'US$' : '$'})</label>
             <div className="text-xl font-bold text-slate-200 py-2">
-              ${metaFondo.toLocaleString()}
+              {monedaFondo === 'USD' ? 'US$ ' : '$ '}{metaFondo.toLocaleString(undefined, { maximumFractionDigits: 2 })}
             </div>
           </div>
         </div>
@@ -273,11 +322,18 @@ export default function InvestmentsTab() {
           <div className="p-6 border-b border-slate-700/50 flex justify-between items-center">
             <div>
               <h3 className="text-lg font-semibold text-slate-200">Portafolio Activo</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Saldos consolidado por activo (Ajustado por Ratio CEDEAR)</p>
+              <p className="text-xs text-slate-400 mt-0.5">Saldo consolidado por activo (Ajustado por Ratio CEDEAR)</p>
             </div>
-            {lastUpdate && (
-              <span className="text-xs text-slate-400">Precios actualizados: {lastUpdate.toLocaleTimeString()}</span>
-            )}
+            <div className="flex items-center gap-3">
+              {cotizacionMEP > 0 && (
+                <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1 font-mono">
+                  MEP: ${cotizacionMEP.toFixed(2)}
+                </span>
+              )}
+              {lastUpdate && (
+                <span className="text-xs text-slate-400">Precios: {lastUpdate.toLocaleTimeString()}</span>
+              )}
+            </div>
           </div>
           
           <div className="overflow-x-auto">
@@ -289,13 +345,14 @@ export default function InvestmentsTab() {
                   <th className="px-6 py-3 font-medium text-right">Cantidad</th>
                   <th className="px-6 py-3 font-medium text-right">Precio Prom.</th>
                   <th className="px-6 py-3 font-medium text-right">Precio Actual</th>
+                  <th className="px-6 py-3 font-medium text-right">Valor Total (USD)</th>
                   <th className="px-6 py-3 font-medium text-right">P&L</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/50">
                 {portfolioArray.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                    <td colSpan={7} className="px-6 py-8 text-center text-slate-500">
                       Tu portafolio está vacío. Realiza una compra o importa tu cartera para empezar.
                     </td>
                   </tr>
@@ -331,6 +388,14 @@ export default function InvestmentsTab() {
                         <td className="px-6 py-4 text-right font-medium text-slate-200">
                           ${currentPrice.toFixed(2)}
                         </td>
+                        <td className="px-6 py-4 text-right font-bold text-indigo-300">
+                          ${currentValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {cotizacionMEP > 0 && (
+                            <div className="text-[10px] text-slate-400 font-normal">
+                              ≈ ${(currentValue * cotizacionMEP).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS
+                            </div>
+                          )}
+                        </td>
                         <td className="px-6 py-4 text-right">
                           <div className={`font-bold ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
                             {isPositive ? '+' : ''}${pnl.toFixed(2)}
@@ -344,6 +409,26 @@ export default function InvestmentsTab() {
                   })
                 )}
               </tbody>
+              {portfolioArray.length > 0 && (
+                <tfoot>
+                  <tr className="bg-slate-900/60 border-t border-slate-700 font-semibold text-slate-200">
+                    <td colSpan={5} className="px-6 py-3 text-right text-sm">TOTAL PORTAFOLIO:</td>
+                    <td className="px-6 py-3 text-right text-indigo-300 text-base font-bold">
+                      ${totalPortfolioValueUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {cotizacionMEP > 0 && (
+                        <div className="text-[10px] text-slate-400 font-normal">
+                          ≈ ${(totalPortfolioValueUSD * cotizacionMEP).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-3 text-right">
+                      <div className={`text-sm font-bold ${totalPnLUSD >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {totalPnLUSD >= 0 ? '+' : ''}${totalPnLUSD.toFixed(2)}
+                      </div>
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
 

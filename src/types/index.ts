@@ -11,15 +11,19 @@ export interface CategoriaGasto {
   subgastos: SubGasto[];
 }
 
+export type Moneda = 'ARS' | 'USD';
+
 export interface Presupuesto {
   ingreso_mensual: number;
   categorias: CategoriaGasto[];
   asignacion_inversiones: number;
+  moneda?: Moneda;
 }
 
 export interface FondoEmergencia {
   saldo_actual: number;
   meta_meses: number;
+  moneda?: Moneda;
 }
 
 export type TipoOperacion = 'COMPRA' | 'VENTA';
@@ -68,13 +72,14 @@ export interface AppState {
 export interface AppStore extends AppState {
   setIngresoMensual: (ingreso: number) => void;
   setAsignacionInversiones: (monto: number) => void;
+  setPresupuestoMoneda: (moneda: Moneda) => void;
   addCategoria: (categoria: CategoriaGasto) => void;
   updateCategoria: (id: string, nombre: string) => void;
   removeCategoria: (id: string) => void;
   addSubgasto: (catId: string, subgasto: SubGasto) => void;
   updateSubgasto: (catId: string, subId: string, data: Partial<SubGasto>) => void;
   removeSubgasto: (catId: string, subId: string) => void;
-  setFondoEmergencia: (saldo: number, metaMeses: number) => void;
+  setFondoEmergencia: (saldo: number, metaMeses: number, moneda?: Moneda) => void;
   addOperacion: (op: Operacion) => void;
   removeOperacion: (id: string) => void;
   addHistorial: (registro: Omit<RegistroHistorial, 'id'>) => void;
