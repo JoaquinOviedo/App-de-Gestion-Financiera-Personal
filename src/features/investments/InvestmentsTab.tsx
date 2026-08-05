@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
-import { Shield, Search, Trash2, Edit2, Check, X, RefreshCw } from 'lucide-react';
-import { fetchAssetPrice, AssetPrice } from '../../lib/api';
+import { Shield, Search, Trash2, Edit2, Check, X } from 'lucide-react';
+import { fetchAssetPrice, fetchCedearPriceARS, AssetPrice } from '../../lib/api';
 import { getCedearRatio } from '../../lib/cedears';
 import { useDolarMEP } from '../../lib/useDolarMEP';
 
 export default function InvestmentsTab() {
   const store = useStore();
   const { fondo_emergencia, presupuesto, inversiones } = store;
-  const { cotizacion: cotizacionMEP, loading: loadingMEP, refresh: refreshMEP } = useDolarMEP();
+  const { cotizacion: cotizacionMEP } = useDolarMEP();
 
   const monedaFondo = fondo_emergencia.moneda || 'ARS';
 
@@ -42,7 +42,7 @@ export default function InvestmentsTab() {
   const [editCantidad, setEditCantidad] = useState<number>(0);
   const [editPrecio, setEditPrecio] = useState<number>(0);
 
-  // Live prices
+  // Live prices (USD per unit/CEDEAR)
   const [livePrices, setLivePrices] = useState<Record<string, number>>({});
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
@@ -51,8 +51,22 @@ export default function InvestmentsTab() {
       const uniqueTickers = Array.from(new Set(inversiones.operaciones.map(op => op.ticker)));
       const newPrices: Record<string, number> = { ...livePrices };
       for (const t of uniqueTickers) {
+        const ratio = getCedearRatio(t, store.cedear_ratios);
+        
+        // Strategy 1: Try to fetch the .BA (Buenos Aires/BYMA) CEDEAR price in ARS
+        // and convert to USD using MEP. This gives the most accurate price matching broker.
+        if (cotizacionMEP > 0) {
+          const arsPrice = await fetchCedearPriceARS(t);
+          if (arsPrice && arsPrice > 0) {
+            // Convert ARS per CEDEAR → USD per CEDEAR
+            newPrices[t] = arsPrice / cotizacionMEP;
+            continue;
+          }
+        }
+        
+        // Strategy 2: Fallback to US underlying ticker price / ratio
         const data = await fetchAssetPrice(t);
-        if (data) newPrices[t] = data.price;
+        if (data) newPrices[t] = data.price / ratio;
       }
       setLivePrices(newPrices);
       setLastUpdate(new Date());
@@ -61,7 +75,7 @@ export default function InvestmentsTab() {
     if (inversiones.operaciones.length > 0) {
       updatePrices();
     }
-  }, [inversiones.operaciones.length]);
+  }, [inversiones.operaciones.length, cotizacionMEP]);
 
   const handleSearch = async () => {
     if (!ticker) return;
@@ -130,10 +144,8 @@ export default function InvestmentsTab() {
 
   // Compute total portfolio values
   const totalPortfolioValueUSD = portfolioArray.reduce((acc, item) => {
-    const ratio = getCedearRatio(item.ticker, store.cedear_ratios);
     const avgPrice = item.costoTotal / item.cantidad;
-    const rawLivePrice = livePrices[item.ticker];
-    const currentPrice = rawLivePrice ? (rawLivePrice / ratio) : avgPrice;
+    const currentPrice = livePrices[item.ticker] ?? avgPrice;
     return acc + (item.cantidad * currentPrice);
   }, 0);
 
@@ -360,9 +372,7 @@ export default function InvestmentsTab() {
                   portfolioArray.map(item => {
                     const ratio = getCedearRatio(item.ticker, store.cedear_ratios);
                     const avgPrice = item.costoTotal / item.cantidad;
-                    // Adjust raw Yahoo Finance live price by CEDEAR ratio if available
-                    const rawLivePrice = livePrices[item.ticker];
-                    const currentPrice = rawLivePrice ? (rawLivePrice / ratio) : avgPrice; 
+                    const currentPrice = livePrices[item.ticker] ?? avgPrice; 
                     const currentValue = item.cantidad * currentPrice;
                     const pnl = currentValue - item.costoTotal;
                     const pnlPct = item.costoTotal > 0 ? (pnl / item.costoTotal) * 100 : 0;

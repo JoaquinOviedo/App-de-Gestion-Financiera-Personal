@@ -3,10 +3,13 @@ import { useStore } from '../../store/useStore';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { Plus, Trash2, ChevronDown, ChevronRight, Calculator } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useDolarMEP } from '../../lib/useDolarMEP';
 
 export default function BudgetTab() {
   const store = useStore();
   const presupuesto = store.presupuesto;
+  const { cotizacion: cotizacionMEP } = useDolarMEP();
+  const monedaPresupuesto = presupuesto.moneda || 'ARS';
   
   const [openCategorias, setOpenCategorias] = useState<Record<string, boolean>>({});
   const [newCatName, setNewCatName] = useState('');
@@ -47,6 +50,8 @@ export default function BudgetTab() {
     { name: 'Libre', value: ahorroLibre > 0 ? ahorroLibre : 0, color: '#10b981' } 
   ];
 
+  const currSymbol = monedaPresupuesto === 'USD' ? 'US$' : '$';
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
       {/* Left Column - Inputs */}
@@ -54,20 +59,46 @@ export default function BudgetTab() {
         
         {/* Ingreso Card */}
         <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-6 backdrop-blur-sm">
-          <h3 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
-            <Calculator size={20} className="text-emerald-400" />
-            Ingreso Mensual
-          </h3>
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
+              <Calculator size={20} className="text-emerald-400" />
+              Ingreso Mensual
+            </h3>
+            {/* Currency Selector */}
+            <div className="flex items-center gap-2 bg-slate-900/60 p-1 rounded-xl border border-slate-700/50">
+              <button
+                onClick={() => store.setPresupuestoMoneda('ARS')}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${monedaPresupuesto === 'ARS' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                ARS ($)
+              </button>
+              <button
+                onClick={() => store.setPresupuestoMoneda('USD')}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${monedaPresupuesto === 'USD' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                USD (US$)
+              </button>
+            </div>
+          </div>
+
           <div className="relative">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium">$</span>
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium">{currSymbol}</span>
             <input 
               type="number" 
               value={presupuesto.ingreso_mensual || ''}
               onChange={(e) => store.setIngresoMensual(Number(e.target.value))}
-              className="w-full bg-slate-900/50 border border-slate-700 rounded-xl py-3 pl-8 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all text-lg font-medium"
+              className="w-full bg-slate-900/50 border border-slate-700 rounded-xl py-3 pl-10 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all text-lg font-medium"
               placeholder="0.00"
             />
           </div>
+          {cotizacionMEP > 0 && presupuesto.ingreso_mensual > 0 && (
+            <p className="text-xs text-slate-400 mt-2">
+              {monedaPresupuesto === 'ARS'
+                ? `≈ US$ ${(presupuesto.ingreso_mensual / cotizacionMEP).toFixed(2)} USD (Dólar MEP: $${cotizacionMEP.toFixed(2)})`
+                : `≈ $ ${(presupuesto.ingreso_mensual * cotizacionMEP).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS (Dólar MEP: $${cotizacionMEP.toFixed(2)})`
+              }
+            </p>
+          )}
         </div>
 
         {/* Categorias */}

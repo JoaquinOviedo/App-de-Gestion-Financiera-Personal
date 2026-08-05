@@ -26,31 +26,51 @@ function App() {
 
   // WebSocket heartbeat and sync logic
   useEffect(() => {
-    let ws: WebSocket;
+    let ws: WebSocket | null = null;
     let pingInterval: ReturnType<typeof setInterval>;
+    let reconnectTimeout: ReturnType<typeof setTimeout>;
+    let isDisposed = false;
 
     const connect = () => {
-      ws = new WebSocket('ws://localhost:3001');
-      
-      ws.onopen = () => {
-        pingInterval = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'PING' }));
+      if (isDisposed) return;
+      try {
+        ws = new WebSocket('ws://localhost:3001');
+        
+        ws.onopen = () => {
+          pingInterval = setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'PING' }));
+            }
+          }, 10000);
+        };
+
+        ws.onerror = () => {
+          // Ignorar silenciosamente errores de conexión cuando el backend opcional no esté corriendo
+        };
+        
+        ws.onclose = () => {
+          clearInterval(pingInterval);
+          if (!isDisposed) {
+            reconnectTimeout = setTimeout(connect, 5000);
           }
-        }, 1000);
-      };
-      
-      ws.onclose = () => {
-        clearInterval(pingInterval);
-        setTimeout(connect, 1000);
-      };
+        };
+      } catch (e) {
+        if (!isDisposed) {
+          reconnectTimeout = setTimeout(connect, 5000);
+        }
+      }
     };
 
     connect();
 
     return () => {
+      isDisposed = true;
       clearInterval(pingInterval);
-      if (ws) ws.close();
+      clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.onclose = null; // evitar re-trigger al desmontar
+        ws.close();
+      }
     };
   }, []);
 
@@ -61,6 +81,9 @@ function App() {
     
     try {
       const ws = new WebSocket('ws://localhost:3001');
+      ws.onerror = () => {
+        // Ignorar si el servidor backend opcional no responde
+      };
       ws.onopen = () => {
         ws.send(JSON.stringify({
           type: 'SAVE_DATA',
@@ -73,11 +96,10 @@ function App() {
             cedear_ratios: estadoCompleto.cedear_ratios
           }
         }));
-        // Cerrar conexión después de enviar
         setTimeout(() => ws.close(), 100);
       };
     } catch (e) {
-      console.error('Error al sincronizar con el backend local:', e);
+      // Ignorar fallo de conexión
     }
   }, [estadoCompleto]);
 
