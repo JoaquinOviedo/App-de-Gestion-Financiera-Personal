@@ -3,12 +3,12 @@ import { useStore } from '../../store/useStore';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { Plus, Trash2, ChevronDown, ChevronRight, Calculator } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useDolarMEP } from '../../lib/useDolarMEP';
+import { useDolarCCL } from '../../lib/useDolarCCL';
 
 export default function BudgetTab() {
   const store = useStore();
   const presupuesto = store.presupuesto;
-  const { cotizacion: cotizacionMEP } = useDolarMEP();
+  const { cotizacion: cotizacionCCL } = useDolarCCL();
   const monedaPresupuesto = presupuesto.moneda || 'ARS';
   
   const [openCategorias, setOpenCategorias] = useState<Record<string, boolean>>({});
@@ -91,11 +91,11 @@ export default function BudgetTab() {
               placeholder="0.00"
             />
           </div>
-          {cotizacionMEP > 0 && presupuesto.ingreso_mensual > 0 && (
+          {cotizacionCCL > 0 && presupuesto.ingreso_mensual > 0 && (
             <p className="text-xs text-slate-400 mt-2">
               {monedaPresupuesto === 'ARS'
-                ? `≈ US$ ${(presupuesto.ingreso_mensual / cotizacionMEP).toFixed(2)} USD (Dólar MEP: $${cotizacionMEP.toFixed(2)})`
-                : `≈ $ ${(presupuesto.ingreso_mensual * cotizacionMEP).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS (Dólar MEP: $${cotizacionMEP.toFixed(2)})`
+                ? `≈ US$ ${(presupuesto.ingreso_mensual / cotizacionCCL).toFixed(2)} USD (Dólar MEP: $${cotizacionCCL.toFixed(2)})`
+                : `≈ $ ${(presupuesto.ingreso_mensual * cotizacionCCL).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS (Dólar MEP: $${cotizacionCCL.toFixed(2)})`
               }
             </p>
           )}

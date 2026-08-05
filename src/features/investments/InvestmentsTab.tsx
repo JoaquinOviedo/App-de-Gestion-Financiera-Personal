@@ -3,12 +3,12 @@ import { useStore } from '../../store/useStore';
 import { Shield, Search, Trash2, Edit2, Check, X } from 'lucide-react';
 import { fetchAssetPrice, fetchCedearPriceARS, AssetPrice } from '../../lib/api';
 import { getCedearRatio } from '../../lib/cedears';
-import { useDolarMEP } from '../../lib/useDolarMEP';
+import { useDolarCCL } from '../../lib/useDolarCCL';
 
 export default function InvestmentsTab() {
   const store = useStore();
   const { fondo_emergencia, presupuesto, inversiones } = store;
-  const { cotizacion: cotizacionMEP } = useDolarMEP();
+  const { cotizacion: cotizacionCCL } = useDolarCCL();
 
   const monedaFondo = fondo_emergencia.moneda || 'ARS';
 
@@ -20,9 +20,9 @@ export default function InvestmentsTab() {
   // Convert expenses to match fondo_emergencia currency for progress calculation
   const gastosMensualesMonedaFondo = (presupuesto.moneda || 'ARS') === monedaFondo
     ? gastosMensualesFijos
-    : (monedaFondo === 'USD' && cotizacionMEP > 0
-        ? gastosMensualesFijos / cotizacionMEP
-        : gastosMensualesFijos * cotizacionMEP);
+    : (monedaFondo === 'USD' && cotizacionCCL > 0
+        ? gastosMensualesFijos / cotizacionCCL
+        : gastosMensualesFijos * cotizacionCCL);
 
   const metaFondo = gastosMensualesMonedaFondo * fondo_emergencia.meta_meses;
   const progresoFondo = metaFondo > 0 ? Math.min((fondo_emergencia.saldo_actual / metaFondo) * 100, 100) : 0;
@@ -54,12 +54,12 @@ export default function InvestmentsTab() {
         const ratio = getCedearRatio(t, store.cedear_ratios);
         
         // Strategy 1: Try to fetch the .BA (Buenos Aires/BYMA) CEDEAR price in ARS
-        // and convert to USD using MEP. This gives the most accurate price matching broker.
-        if (cotizacionMEP > 0) {
+        // and convert to USD using CCL. This gives the most accurate price matching broker.
+        if (cotizacionCCL > 0) {
           const arsPrice = await fetchCedearPriceARS(t);
           if (arsPrice && arsPrice > 0) {
             // Convert ARS per CEDEAR → USD per CEDEAR
-            newPrices[t] = arsPrice / cotizacionMEP;
+            newPrices[t] = arsPrice / cotizacionCCL;
             continue;
           }
         }
@@ -75,7 +75,7 @@ export default function InvestmentsTab() {
     if (inversiones.operaciones.length > 0) {
       updatePrices();
     }
-  }, [inversiones.operaciones.length, cotizacionMEP]);
+  }, [inversiones.operaciones.length, cotizacionCCL]);
 
   const handleSearch = async () => {
     if (!ticker) return;
@@ -189,11 +189,11 @@ export default function InvestmentsTab() {
               className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-yellow-500"
               placeholder="0.00"
             />
-            {cotizacionMEP > 0 && (
+            {cotizacionCCL > 0 && (
               <p className="text-xs text-slate-400">
                 {monedaFondo === 'ARS'
-                  ? `≈ US$ ${(fondo_emergencia.saldo_actual / cotizacionMEP).toFixed(2)} USD (MEP: $${cotizacionMEP.toFixed(2)})`
-                  : `≈ $ ${(fondo_emergencia.saldo_actual * cotizacionMEP).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS (MEP: $${cotizacionMEP.toFixed(2)})`
+                  ? `≈ US$ ${(fondo_emergencia.saldo_actual / cotizacionCCL).toFixed(2)} USD (CCL: $${cotizacionCCL.toFixed(2)})`
+                  : `≈ $ ${(fondo_emergencia.saldo_actual * cotizacionCCL).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS (CCL: $${cotizacionCCL.toFixed(2)})`
                 }
               </p>
             )}
@@ -337,9 +337,9 @@ export default function InvestmentsTab() {
               <p className="text-xs text-slate-400 mt-0.5">Saldo consolidado por activo (Ajustado por Ratio CEDEAR)</p>
             </div>
             <div className="flex items-center gap-3">
-              {cotizacionMEP > 0 && (
+              {cotizacionCCL > 0 && (
                 <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1 font-mono">
-                  MEP: ${cotizacionMEP.toFixed(2)}
+                  CCL: ${cotizacionCCL.toFixed(2)}
                 </span>
               )}
               {lastUpdate && (
@@ -400,9 +400,9 @@ export default function InvestmentsTab() {
                         </td>
                         <td className="px-6 py-4 text-right font-bold text-indigo-300">
                           ${currentValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          {cotizacionMEP > 0 && (
+                          {cotizacionCCL > 0 && (
                             <div className="text-[10px] text-slate-400 font-normal">
-                              ≈ ${(currentValue * cotizacionMEP).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS
+                              ≈ ${(currentValue * cotizacionCCL).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS
                             </div>
                           )}
                         </td>
@@ -425,9 +425,9 @@ export default function InvestmentsTab() {
                     <td colSpan={5} className="px-6 py-3 text-right text-sm">TOTAL PORTAFOLIO:</td>
                     <td className="px-6 py-3 text-right text-indigo-300 text-base font-bold">
                       ${totalPortfolioValueUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      {cotizacionMEP > 0 && (
+                      {cotizacionCCL > 0 && (
                         <div className="text-[10px] text-slate-400 font-normal">
-                          ≈ ${(totalPortfolioValueUSD * cotizacionMEP).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS
+                          ≈ ${(totalPortfolioValueUSD * cotizacionCCL).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS
                         </div>
                       )}
                     </td>
