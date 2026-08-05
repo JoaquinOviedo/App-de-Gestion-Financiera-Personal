@@ -1,9 +1,9 @@
 export const CEDEAR_RATIOS: Record<string, number> = {
-  SPY: 20,
+  SPY: 60,
   QQQ: 20,
-  GLD: 7,
-  IBIT: 5,
-  VIG: 10,
+  GLD: 50,
+  IBIT: 10,
+  VIG: 39,
   AAPL: 20,
   KO: 5,
   NVDA: 24,

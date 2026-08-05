@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 
-interface DolarMEPState {
+interface DolarCCLState {
   cotizacion: number;
   loading: boolean;
   error: string | null;
@@ -11,8 +11,8 @@ let cachedCotizacion: number | null = null;
 let cachedAt: number | null = null;
 const CACHE_DURATION_MS = 10 * 60 * 1000; // 10 minutes
 
-export function useDolarMEP() {
-  const [state, setState] = useState<DolarMEPState>({
+export function useDolarCCL() {
+  const [state, setState] = useState<DolarCCLState>({
     cotizacion: cachedCotizacion || 0,
     loading: !cachedCotizacion,
     error: null,
@@ -34,7 +34,8 @@ export function useDolarMEP() {
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
-      const res = await fetch('https://api.argentinadatos.com/v1/cotizaciones/dolares/mep');
+      // Fetching Dólar CCL instead of MEP to match broker valuations for CEDEARs
+      const res = await fetch('https://api.argentinadatos.com/v1/cotizaciones/dolares/ccl');
       const data = await res.json();
 
       if (Array.isArray(data) && data.length > 0) {
@@ -55,11 +56,11 @@ export function useDolarMEP() {
         throw new Error('Respuesta vacía de la API');
       }
     } catch (err) {
-      console.error('Error fetching dólar MEP:', err);
+      console.error('Error fetching dólar CCL:', err);
       setState(prev => ({
         ...prev,
         loading: false,
-        error: 'No se pudo obtener la cotización MEP',
+        error: 'No se pudo obtener la cotización CCL',
       }));
     }
   }, []);

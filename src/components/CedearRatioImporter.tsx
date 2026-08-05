@@ -43,6 +43,14 @@ export default function CedearRatioImporter({ onClose }: Props) {
 
   const { setCedearRatios } = useStore();
 
+  const handleResetDefaults = () => {
+    setCedearRatios({});
+    setSavedSuccess(true);
+    setTimeout(() => {
+      onClose();
+    }, 1200);
+  };
+
   const processCSVText = (text: string) => {
     setIsProcessing(true);
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
@@ -107,11 +115,23 @@ export default function CedearRatioImporter({ onClose }: Props) {
         <div className="flex justify-between items-center p-6 border-b border-gray-800">
           <div>
             <h2 className="text-xl font-semibold text-white">Importador de Ratios de CEDEARs (CSV)</h2>
-            <p className="text-gray-400 text-sm mt-1">Carga o pega tu CSV de equivalencias y ratios para personalizar el cálculo de conversión.</p>
+            <p className="text-gray-400 text-sm">
+              Carga el archivo CSV con los ratios de conversión oficial de los CEDEARs respecto a sus acciones subyacentes.
+            </p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-800 rounded-lg text-gray-400 transition-colors">
-            <X size={20} />
-          </button>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleResetDefaults}
+              className="px-3 py-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5"
+              title="Restablece los ratios por defecto (SPY 20:1, QQQ 20:1, GLD 7:1, IBIT 5:1, VIG 10:1, etc.)"
+            >
+              <RefreshCw size={14} /> Restablecer Ratios Estándar
+            </button>
+            <button onClick={onClose} className="p-2 hover:bg-gray-800 rounded-lg text-gray-400 transition-colors">
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
