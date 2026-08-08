@@ -10,7 +10,7 @@ export default function InvestmentsTab() {
   const store = useStore();
   const { fondo_emergencia, presupuesto, inversiones } = store;
   const valuation = usePortfolioValuation();
-  const cotizacionCCL = valuation.status === 'ready' ? valuation.cotizacionCCL : 0;
+  const cotizacionMEP = valuation.status === 'ready' ? valuation.cotizacionMEP : 0;
 
   const monedaFondo = fondo_emergencia.moneda || 'ARS';
 
@@ -22,9 +22,9 @@ export default function InvestmentsTab() {
   // Convert expenses to match fondo_emergencia currency for progress calculation
   const gastosMensualesMonedaFondo = (presupuesto.moneda || 'ARS') === monedaFondo
     ? gastosMensualesFijos
-    : (monedaFondo === 'USD' && cotizacionCCL > 0
-        ? gastosMensualesFijos / cotizacionCCL
-        : gastosMensualesFijos * cotizacionCCL);
+    : (monedaFondo === 'USD' && cotizacionMEP > 0
+        ? gastosMensualesFijos / cotizacionMEP
+        : gastosMensualesFijos * cotizacionMEP);
 
   const metaFondo = gastosMensualesMonedaFondo * fondo_emergencia.meta_meses;
   const progresoFondo = metaFondo > 0 ? Math.min((fondo_emergencia.saldo_actual / metaFondo) * 100, 100) : 0;
@@ -135,11 +135,11 @@ export default function InvestmentsTab() {
               className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-yellow-500"
               placeholder="0.00"
             />
-            {cotizacionCCL > 0 && (
+            {cotizacionMEP > 0 && (
               <p className="text-xs text-slate-400">
                 {monedaFondo === 'ARS'
-                  ? `≈ US$ ${(fondo_emergencia.saldo_actual / cotizacionCCL).toFixed(2)} USD (CCL: $${cotizacionCCL.toFixed(2)})`
-                  : `≈ $ ${(fondo_emergencia.saldo_actual * cotizacionCCL).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS (CCL: $${cotizacionCCL.toFixed(2)})`
+                  ? `≈ US$ ${(fondo_emergencia.saldo_actual / cotizacionMEP).toFixed(2)} USD (MEP: $${cotizacionMEP.toFixed(2)})`
+                  : `≈ $ ${(fondo_emergencia.saldo_actual * cotizacionMEP).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS (MEP: $${cotizacionMEP.toFixed(2)})`
                 }
               </p>
             )}
@@ -283,9 +283,9 @@ export default function InvestmentsTab() {
               <p className="text-xs text-slate-400 mt-0.5">Saldo consolidado por activo (Ajustado por Ratio CEDEAR)</p>
             </div>
             <div className="flex items-center gap-3">
-              {cotizacionCCL > 0 && (
+              {cotizacionMEP > 0 && (
                 <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1 font-mono">
-                  CCL: ${cotizacionCCL.toFixed(2)}
+                  MEP: ${cotizacionMEP.toFixed(2)}
                 </span>
               )}
               {lastUpdate && (
@@ -351,9 +351,9 @@ export default function InvestmentsTab() {
                         </td>
                         <td className="px-6 py-4 text-right font-bold text-indigo-300">
                           ${currentValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          {cotizacionCCL > 0 && (
+                          {cotizacionMEP > 0 && (
                             <div className="text-[10px] text-slate-400 font-normal">
-                              ≈ ${(currentValue * cotizacionCCL).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS
+                              ≈ ${(currentValue * cotizacionMEP).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS
                             </div>
                           )}
                         </td>
@@ -376,9 +376,9 @@ export default function InvestmentsTab() {
                     <td colSpan={5} className="px-6 py-3 text-right text-sm">TOTAL PORTAFOLIO:</td>
                     <td className="px-6 py-3 text-right text-indigo-300 text-base font-bold">
                       ${totalPortfolioValueUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      {cotizacionCCL > 0 && (
+                      {cotizacionMEP > 0 && (
                         <div className="text-[10px] text-slate-400 font-normal">
-                          ≈ ${(totalPortfolioValueUSD * cotizacionCCL).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS
+                          ≈ ${(totalPortfolioValueUSD * cotizacionMEP).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS
                         </div>
                       )}
                     </td>

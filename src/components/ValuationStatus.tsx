@@ -8,7 +8,7 @@ export default function ValuationStatus({ valuation }: { valuation: PortfolioVal
     return (
       <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-6 text-center text-blue-200">
         <RefreshCw className="mx-auto mb-3 animate-spin" size={24} />
-        Actualizando dólar CCL y precios del portafolio…
+        Actualizando dólar bolsa/MEP y precios del portafolio…
       </div>
     );
   }

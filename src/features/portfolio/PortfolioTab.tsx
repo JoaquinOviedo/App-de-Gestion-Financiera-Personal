@@ -14,7 +14,7 @@ export default function PortfolioTab() {
 
   if (valuation.status !== 'ready') return <ValuationStatus valuation={valuation} />;
 
-  const cotizacionCCL = valuation.cotizacionCCL;
+  const cotizacionMEP = valuation.cotizacionMEP;
   const currentInversionesValueUSD = valuation.totalInversionesUSD;
   const fondoIsUSD = fondo_emergencia.moneda === 'USD';
   const currentEmergenciaValueUSD = valuation.valorEmergenciaUSD;
@@ -37,7 +37,7 @@ export default function PortfolioTab() {
         ? r.valor_emergencia
         : fondoIsUSD
         ? r.valor_emergencia
-        : (cotizacionCCL > 0 ? r.valor_emergencia / cotizacionCCL : 0);
+        : (cotizacionMEP > 0 ? r.valor_emergencia / cotizacionMEP : 0);
       return {
         ...r,
         valor_inversiones: valorInversionesUSD,

@@ -9,7 +9,7 @@ export default function BudgetTab() {
   const store = useStore();
   const presupuesto = store.presupuesto;
   const valuation = usePortfolioValuation();
-  const cotizacionCCL = valuation.status === 'ready' ? valuation.cotizacionCCL : 0;
+  const cotizacionMEP = valuation.status === 'ready' ? valuation.cotizacionMEP : 0;
   const monedaPresupuesto = presupuesto.moneda || 'ARS';
   
   const [openCategorias, setOpenCategorias] = useState<Record<string, boolean>>({});
@@ -92,11 +92,11 @@ export default function BudgetTab() {
               placeholder="0.00"
             />
           </div>
-          {cotizacionCCL > 0 && presupuesto.ingreso_mensual > 0 && (
+          {cotizacionMEP > 0 && presupuesto.ingreso_mensual > 0 && (
             <p className="text-xs text-slate-400 mt-2">
               {monedaPresupuesto === 'ARS'
-                ? `≈ US$ ${(presupuesto.ingreso_mensual / cotizacionCCL).toFixed(2)} USD (Dólar MEP: $${cotizacionCCL.toFixed(2)})`
-                : `≈ $ ${(presupuesto.ingreso_mensual * cotizacionCCL).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS (Dólar MEP: $${cotizacionCCL.toFixed(2)})`
+                ? `≈ US$ ${(presupuesto.ingreso_mensual / cotizacionMEP).toFixed(2)} USD (Dólar MEP: $${cotizacionMEP.toFixed(2)})`
+                : `≈ $ ${(presupuesto.ingreso_mensual * cotizacionMEP).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS (Dólar MEP: $${cotizacionMEP.toFixed(2)})`
               }
             </p>
           )}

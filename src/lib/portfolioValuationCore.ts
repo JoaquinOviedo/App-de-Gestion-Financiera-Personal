@@ -44,12 +44,12 @@ export function consolidatePositions(operaciones: Operacion[], prices: Record<st
 
 export async function resolveTickerPrice(
   ticker: string,
-  ccl: number,
+  mep: number,
   ratio: number,
   lastKnownPrice: number | undefined,
 ): Promise<number | null> {
   const arsPrice = await fetchCedearPriceARS(ticker);
-  if (arsPrice && arsPrice > 0) return arsPrice / ccl;
+  if (arsPrice && arsPrice > 0) return arsPrice / mep;
 
   const underlying = await fetchAssetPrice(ticker);
   if (underlying?.price && underlying.price > 0) return underlying.price / ratio;

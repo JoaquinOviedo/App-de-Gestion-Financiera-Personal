@@ -196,11 +196,11 @@ export default function BrokerImporter({ onClose }: Props) {
     setIsProcessing(false);
   };
 
-  const fetchDolarCCL = async () => {
+  const fetchDolarMEP = async () => {
     setIsFetchingUSD(true);
     try {
-      // Using argentinadatos API which contains historical series for CCL
-      const res = await fetch('https://api.argentinadatos.com/v1/cotizaciones/dolares/ccl');
+      // Serie histórica de dólar bolsa/MEP para convertir cada operación por fecha.
+      const res = await fetch('https://api.argentinadatos.com/v1/cotizaciones/dolares/bolsa');
       const data = await res.json();
       
       const updatedOps = operaciones.map(op => {
@@ -229,7 +229,7 @@ export default function BrokerImporter({ onClose }: Props) {
       
       setOperaciones(updatedOps);
     } catch (error) {
-      alert("Error obteniendo cotización CCL. Revisa tu conexión.");
+      alert("Error obteniendo cotización MEP. Revisa tu conexión.");
       console.error(error);
     } finally {
       setIsFetchingUSD(false);
@@ -335,12 +335,12 @@ export default function BrokerImporter({ onClose }: Props) {
                   <div className="bg-gray-800/50 px-4 py-3 border-b border-gray-800 flex justify-between items-center">
                     <h3 className="text-sm font-medium text-white">Operaciones con Activos</h3>
                     <button
-                      onClick={fetchDolarCCL}
+                      onClick={fetchDolarMEP}
                       disabled={isFetchingUSD}
                       className="text-xs bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors"
                     >
                       <DollarSign size={14} />
-                      {isFetchingUSD ? 'Obteniendo CCL...' : 'Convertir a USD (Cotización CCL histórica)'}
+                      {isFetchingUSD ? 'Obteniendo MEP...' : 'Convertir a USD (Cotización MEP histórica)'}
                     </button>
                   </div>
                   <div className="overflow-x-auto">

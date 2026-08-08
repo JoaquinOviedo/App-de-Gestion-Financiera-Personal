@@ -1,7 +1,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { getCedearRatio } from './cedears';
-import { fetchDolarCCL } from './useDolarCCL';
+import { fetchDolarMEP } from './useDolarMEP';
 import { consolidatePositions, PortfolioPosition, resolveTickerPrice, selectLastKnownPrice } from './portfolioValuationCore';
 
 interface ValuationLoading { status: 'loading'; retry: () => void }
@@ -13,7 +13,7 @@ interface ValuationError {
 }
 export interface ValuationReady {
   status: 'ready';
-  cotizacionCCL: number;
+  cotizacionMEP: number;
   lastUpdate: Date;
   prices: Record<string, number>;
   positions: PortfolioPosition[];
@@ -27,10 +27,10 @@ export type PortfolioValuation = ValuationLoading | ValuationError | ValuationRe
 type MarketState =
   | { status: 'loading' }
   | { status: 'error'; message: string; unresolvedTickers: string[] }
-  | { status: 'ready'; cotizacionCCL: number; lastUpdate: Date; prices: Record<string, number> };
+  | { status: 'ready'; cotizacionMEP: number; lastUpdate: Date; prices: Record<string, number> };
 
 const PortfolioValuationContext = createContext<PortfolioValuation | null>(null);
-const PRICE_CACHE_STORAGE_KEY = 'fintech_last_known_prices';
+const PRICE_CACHE_STORAGE_KEY = 'fintech_last_known_prices_mep';
 
 interface CachedPrice {
   price: number;
@@ -66,7 +66,7 @@ export function PortfolioValuationProvider({ children }: { children: ReactNode }
 
     const update = async () => {
       try {
-        const { cotizacion, updatedAt } = await fetchDolarCCL(true);
+        const { cotizacion, updatedAt } = await fetchDolarMEP(true);
         const quantities = operaciones.reduce<Record<string, number>>((result, op) => {
           result[op.ticker] = (result[op.ticker] ?? 0) + (op.tipo === 'COMPRA' ? op.cantidad : -op.cantidad);
           return result;
@@ -105,7 +105,7 @@ export function PortfolioValuationProvider({ children }: { children: ReactNode }
 
         setMarket({
           status: 'ready',
-          cotizacionCCL: cotizacion,
+          cotizacionMEP: cotizacion,
           lastUpdate: updatedAt,
           prices: Object.fromEntries(entries) as Record<string, number>,
         });
@@ -114,7 +114,7 @@ export function PortfolioValuationProvider({ children }: { children: ReactNode }
         console.error('Error actualizando la valuación del portafolio:', error);
         setMarket({
           status: 'error',
-          message: 'No se pudo obtener la cotización CCL. Revisa tu conexión y vuelve a intentar.',
+          message: 'No se pudo obtener la cotización del dólar bolsa/MEP. Revisa tu conexión y vuelve a intentar.',
           unresolvedTickers: [],
         });
       }
@@ -132,11 +132,11 @@ export function PortfolioValuationProvider({ children }: { children: ReactNode }
     const totalInversionesUSD = positions.reduce((total, position) => total + position.valorActualUSD, 0);
     const valorEmergenciaUSD = fondo.moneda === 'USD'
       ? fondo.saldo_actual
-      : fondo.saldo_actual / market.cotizacionCCL;
+      : fondo.saldo_actual / market.cotizacionMEP;
 
     return {
       status: 'ready',
-      cotizacionCCL: market.cotizacionCCL,
+      cotizacionMEP: market.cotizacionMEP,
       lastUpdate: market.lastUpdate,
       prices: market.prices,
       positions,

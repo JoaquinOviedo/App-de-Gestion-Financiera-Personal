@@ -18,7 +18,7 @@ beforeEach(() => {
 });
 
 describe('resolveTickerPrice', () => {
-  it('prioriza el precio BYMA convertido con CCL', async () => {
+  it('prioriza el precio BYMA convertido con dólar bolsa/MEP', async () => {
     mockedCedearPrice.mockResolvedValue(13_000);
     const result = await resolveTickerPrice('SPY', 1_300, 60, 12.5);
     expect(result).toBe(10);
