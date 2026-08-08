@@ -36,6 +36,7 @@ export interface Operacion {
   icono_url: string;
   cantidad: number;
   precio_operacion: number; // in USD
+  precio_actual_usd?: number;
   fecha: string;
   precio_unitario_ars?: number;
   total_ars?: number;
@@ -58,6 +59,17 @@ export interface RegistroHistorial {
   nota?: string;
   balance_usd?: number;
   movimiento?: number;
+  cotizacion_ccl?: number;
+  cotizacion_mep?: number;
+  fecha_cotizacion?: string;
+  valores_normalizados_usd?: boolean;
+}
+
+export interface SnapshotValuation {
+  valor_inversiones_usd: number;
+  valor_emergencia_usd: number;
+  cotizacion_mep: number;
+  fecha_cotizacion: string;
 }
 
 export interface AppState {
@@ -84,7 +96,7 @@ export interface AppStore extends AppState {
   removeOperacion: (id: string) => void;
   addHistorial: (registro: Omit<RegistroHistorial, 'id'>) => void;
   removeHistorial: (id: string) => void;
-  checkAndCreateSnapshot: (currentInversionesValue: number) => void;
+  checkAndCreateSnapshot: (valuation: SnapshotValuation) => void;
   importData: (data: AppState) => void;
   importarHistorialAmCharts: (registros: RegistroHistorial[], reemplazarPrevios: boolean) => void;
   importarOperacionesBroker: (operaciones: Operacion[], ingresos: number) => void;

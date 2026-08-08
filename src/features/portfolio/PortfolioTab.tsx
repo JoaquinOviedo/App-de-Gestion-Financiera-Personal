@@ -2,24 +2,22 @@ import { useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { TrendingUp, TrendingDown, Wallet, Shield, LineChart } from 'lucide-react';
-import { useDolarCCL } from '../../lib/useDolarCCL';
+import { usePortfolioValuation } from '../../lib/portfolioValuation';
+import ValuationStatus from '../../components/ValuationStatus';
 
 export default function PortfolioTab() {
   const historial_patrimonio = useStore(state => state.historial_patrimonio);
-  const inversiones = useStore(state => state.inversiones);
   const fondo_emergencia = useStore(state => state.fondo_emergencia);
-  const { cotizacion: cotizacionCCL } = useDolarCCL();
+  const valuation = usePortfolioValuation();
 
   const [filter, setFilter] = useState<'TOTAL' | 'INVERSIONES' | 'EMERGENCIA'>('TOTAL');
 
-  // Investments operations values are stored in USD
-  const currentInversionesValueUSD = inversiones.operaciones.reduce((acc, op) => acc + (op.cantidad * op.precio_operacion), 0);
-  
-  // Emergency fund: convert ARS → USD using CCL rate. If moneda is undefined, it defaults to ARS.
+  if (valuation.status !== 'ready') return <ValuationStatus valuation={valuation} />;
+
+  const cotizacionCCL = valuation.cotizacionCCL;
+  const currentInversionesValueUSD = valuation.totalInversionesUSD;
   const fondoIsUSD = fondo_emergencia.moneda === 'USD';
-  const currentEmergenciaValueUSD = fondoIsUSD
-    ? fondo_emergencia.saldo_actual
-    : (cotizacionCCL > 0 ? fondo_emergencia.saldo_actual / cotizacionCCL : 0);
+  const currentEmergenciaValueUSD = valuation.valorEmergenciaUSD;
   
   const currentRecord = {
     fecha: new Date().toISOString().split('T')[0],
@@ -35,7 +33,9 @@ export default function PortfolioTab() {
       // Historical investment values: use balance_usd if available (from amCharts import), otherwise use stored value (already in USD)
       const valorInversionesUSD = r.balance_usd ?? r.valor_inversiones;
       // Historical emergency values: convert ARS → USD. If no rate available, show 0 to avoid inflating chart.
-      const valorEmergenciaUSD = fondoIsUSD
+      const valorEmergenciaUSD = r.valores_normalizados_usd
+        ? r.valor_emergencia
+        : fondoIsUSD
         ? r.valor_emergencia
         : (cotizacionCCL > 0 ? r.valor_emergencia / cotizacionCCL : 0);
       return {
@@ -182,7 +182,7 @@ export default function PortfolioTab() {
                   contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '0.75rem', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}
                   itemStyle={{ color: getChartColor(), fontWeight: 'bold' }}
                   labelStyle={{ color: '#94a3b8', marginBottom: '0.5rem' }}
-                  formatter={(value: any) => [`US$ ${Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, filter === 'TOTAL' ? 'Patrimonio Total (USD)' : (filter === 'INVERSIONES' ? 'Inversiones (USD)' : 'Fondo de Emergencia (USD)')]}
+                  formatter={(value) => [`US$ ${Number(value ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, filter === 'TOTAL' ? 'Patrimonio Total (USD)' : (filter === 'INVERSIONES' ? 'Inversiones (USD)' : 'Fondo de Emergencia (USD)')]}
                 />
                 <Area 
                   type="monotone" 

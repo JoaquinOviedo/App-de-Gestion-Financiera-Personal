@@ -115,6 +115,7 @@ export default function CurrentPortfolioImporter({ onClose }: Props) {
       icono_url: '',
       cantidad: h.cantidad,
       precio_operacion: h.precioPromedioUSD, // Purchase cost in USD
+      precio_actual_usd: h.precioActualUSD,
       origen: 'IMPORTADOR_CARTERA_ACTUAL'
     }));
 
@@ -122,7 +123,7 @@ export default function CurrentPortfolioImporter({ onClose }: Props) {
     onClose();
   };
 
-  const handleHoldingChange = (index: number, field: keyof ParsedHolding, val: any) => {
+  const handleHoldingChange = <K extends keyof ParsedHolding,>(index: number, field: K, val: ParsedHolding[K]) => {
     setHoldings(prev => {
       const copy = [...prev];
       copy[index] = { ...copy[index], [field]: val };

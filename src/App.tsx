@@ -10,9 +10,19 @@ import BrokerImporter from './components/BrokerImporter';
 import CurrentPortfolioImporter from './components/CurrentPortfolioImporter';
 import CedearRatioImporter from './components/CedearRatioImporter';
 import AdminModal from './components/AdminModal';
+import { usePortfolioValuation } from './lib/portfolioValuation';
+
+const TAB_IDS = ['budget', 'history', 'portfolio', 'investments'] as const;
+type AppTab = typeof TAB_IDS[number];
+const ACTIVE_TAB_STORAGE_KEY = 'fintech_active_tab';
+
+function getInitialTab(): AppTab {
+  const savedTab = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
+  return TAB_IDS.includes(savedTab as AppTab) ? savedTab as AppTab : 'budget';
+}
 
 function App() {
-  const [activeTab, setActiveTab] = useState('budget');
+  const [activeTab, setActiveTab] = useState<AppTab>(getInitialTab);
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [showAmChartsImporter, setShowAmChartsImporter] = useState(false);
   const [showBrokerImporter, setShowBrokerImporter] = useState(false);
@@ -21,8 +31,8 @@ function App() {
   
   const checkAndCreateSnapshot = useStore(state => state.checkAndCreateSnapshot);
   const importData = useStore(state => state.importData);
-  const inversiones = useStore(state => state.inversiones);
   const estadoCompleto = useStore(state => state);
+  const valuation = usePortfolioValuation();
 
   // WebSocket heartbeat and sync logic
   useEffect(() => {
@@ -54,7 +64,7 @@ function App() {
             reconnectTimeout = setTimeout(connect, 5000);
           }
         };
-      } catch (e) {
+      } catch {
         if (!isDisposed) {
           reconnectTimeout = setTimeout(connect, 5000);
         }
@@ -98,17 +108,24 @@ function App() {
         }));
         setTimeout(() => ws.close(), 100);
       };
-    } catch (e) {
+    } catch {
       // Ignorar fallo de conexión
     }
   }, [estadoCompleto]);
 
   useEffect(() => {
-    const currentInversionesValue = inversiones.operaciones.reduce((acc, op) => {
-      return acc + (op.cantidad * op.precio_operacion);
-    }, 0);
-    checkAndCreateSnapshot(currentInversionesValue);
-  }, [checkAndCreateSnapshot, inversiones.operaciones]);
+    localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (valuation.status !== 'ready') return;
+    checkAndCreateSnapshot({
+      valor_inversiones_usd: valuation.totalInversionesUSD,
+      valor_emergencia_usd: valuation.valorEmergenciaUSD,
+      cotizacion_mep: valuation.cotizacionMEP,
+      fecha_cotizacion: valuation.lastUpdate.toISOString(),
+    });
+  }, [checkAndCreateSnapshot, valuation]);
 
   const handleExport = () => {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(estadoCompleto, null, 2));
@@ -133,14 +150,14 @@ function App() {
         } else {
           alert('Formato de archivo inválido.');
         }
-      } catch (err) {
+      } catch {
         alert('Error al leer el archivo JSON.');
       }
     };
     reader.readAsText(file);
   };
 
-  const tabs = [
+  const tabs: Array<{ id: AppTab; label: string; icon: typeof LayoutDashboard; component: React.ComponentType }> = [
     { id: 'budget', label: 'Presupuesto', icon: LayoutDashboard, component: BudgetTab },
     { id: 'history', label: 'Historial', icon: History, component: HistoryTab },
     { id: 'portfolio', label: 'Evolución', icon: LineChart, component: PortfolioTab },

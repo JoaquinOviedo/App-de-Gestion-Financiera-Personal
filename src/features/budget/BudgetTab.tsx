@@ -3,12 +3,13 @@ import { useStore } from '../../store/useStore';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { Plus, Trash2, ChevronDown, ChevronRight, Calculator } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useDolarCCL } from '../../lib/useDolarCCL';
+import { usePortfolioValuation } from '../../lib/portfolioValuation';
 
 export default function BudgetTab() {
   const store = useStore();
   const presupuesto = store.presupuesto;
-  const { cotizacion: cotizacionCCL } = useDolarCCL();
+  const valuation = usePortfolioValuation();
+  const cotizacionCCL = valuation.status === 'ready' ? valuation.cotizacionCCL : 0;
   const monedaPresupuesto = presupuesto.moneda || 'ARS';
   
   const [openCategorias, setOpenCategorias] = useState<Record<string, boolean>>({});
@@ -258,7 +259,7 @@ export default function BudgetTab() {
                   ))}
                 </Pie>
                 <Tooltip 
-                  formatter={(value: any) => `$${value.toLocaleString()}`}
+                  formatter={(value) => `$${Number(value ?? 0).toLocaleString()}`}
                   contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '0.75rem', color: '#f8fafc' }}
                 />
               </PieChart>

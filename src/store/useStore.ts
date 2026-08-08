@@ -113,7 +113,7 @@ export const useStore = create<AppStore>()(
           historial_patrimonio: state.historial_patrimonio.filter(h => h.id !== id)
         })),
 
-      checkAndCreateSnapshot: (currentInversionesValue) => {
+      checkAndCreateSnapshot: (valuation) => {
         const state = get();
         const historial = state.historial_patrimonio;
         
@@ -138,14 +138,16 @@ export const useStore = create<AppStore>()(
         }
 
         if (shouldCreate) {
-          const valorEmergencia = state.fondo_emergencia.saldo_actual;
           get().addHistorial({
             fecha: now.toISOString().split('T')[0],
-            valor_inversiones: currentInversionesValue,
-            valor_emergencia: valorEmergencia,
-            total: currentInversionesValue + valorEmergencia,
+            valor_inversiones: valuation.valor_inversiones_usd,
+            valor_emergencia: valuation.valor_emergencia_usd,
+            total: valuation.valor_inversiones_usd + valuation.valor_emergencia_usd,
             origen: 'AUTO_SNAPSHOT',
-            nota: 'Snapshot Automático Semanal'
+            nota: 'Snapshot Automático Semanal',
+            cotizacion_mep: valuation.cotizacion_mep,
+            fecha_cotizacion: valuation.fecha_cotizacion,
+            valores_normalizados_usd: true
           });
         }
       },

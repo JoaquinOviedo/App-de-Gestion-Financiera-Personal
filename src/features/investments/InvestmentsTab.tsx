@@ -1,14 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { Shield, Search, Trash2, Edit2, Check, X } from 'lucide-react';
-import { fetchAssetPrice, fetchCedearPriceARS, AssetPrice } from '../../lib/api';
+import { fetchAssetPrice, AssetPrice } from '../../lib/api';
 import { getCedearRatio } from '../../lib/cedears';
-import { useDolarCCL } from '../../lib/useDolarCCL';
+import { usePortfolioValuation } from '../../lib/portfolioValuation';
+import ValuationStatus from '../../components/ValuationStatus';
 
 export default function InvestmentsTab() {
   const store = useStore();
   const { fondo_emergencia, presupuesto, inversiones } = store;
-  const { cotizacion: cotizacionCCL } = useDolarCCL();
+  const valuation = usePortfolioValuation();
+  const cotizacionCCL = valuation.status === 'ready' ? valuation.cotizacionCCL : 0;
 
   const monedaFondo = fondo_emergencia.moneda || 'ARS';
 
@@ -41,41 +43,6 @@ export default function InvestmentsTab() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editCantidad, setEditCantidad] = useState<number>(0);
   const [editPrecio, setEditPrecio] = useState<number>(0);
-
-  // Live prices (USD per unit/CEDEAR)
-  const [livePrices, setLivePrices] = useState<Record<string, number>>({});
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-
-  useEffect(() => {
-    const updatePrices = async () => {
-      const uniqueTickers = Array.from(new Set(inversiones.operaciones.map(op => op.ticker)));
-      const newPrices: Record<string, number> = { ...livePrices };
-      for (const t of uniqueTickers) {
-        const ratio = getCedearRatio(t, store.cedear_ratios);
-        
-        // Strategy 1: Try to fetch the .BA (Buenos Aires/BYMA) CEDEAR price in ARS
-        // and convert to USD using CCL. This gives the most accurate price matching broker.
-        if (cotizacionCCL > 0) {
-          const arsPrice = await fetchCedearPriceARS(t);
-          if (arsPrice && arsPrice > 0) {
-            // Convert ARS per CEDEAR → USD per CEDEAR
-            newPrices[t] = arsPrice / cotizacionCCL;
-            continue;
-          }
-        }
-        
-        // Strategy 2: Fallback to US underlying ticker price / ratio
-        const data = await fetchAssetPrice(t);
-        if (data) newPrices[t] = data.price / ratio;
-      }
-      setLivePrices(newPrices);
-      setLastUpdate(new Date());
-    };
-    
-    if (inversiones.operaciones.length > 0) {
-      updatePrices();
-    }
-  }, [inversiones.operaciones.length, cotizacionCCL]);
 
   const handleSearch = async () => {
     if (!ticker) return;
@@ -124,31 +91,10 @@ export default function InvestmentsTab() {
     setEditingId(null);
   };
 
-  // Group operations by ticker to show current portfolio
-  const portfolio = inversiones.operaciones.reduce((acc, op) => {
-    if (!acc[op.ticker]) {
-      acc[op.ticker] = { ticker: op.ticker, name: op.nombre, cantidad: 0, costoTotal: 0 };
-    }
-    if (op.tipo === 'COMPRA') {
-      acc[op.ticker].cantidad += op.cantidad;
-      acc[op.ticker].costoTotal += op.cantidad * op.precio_operacion;
-    } else {
-      acc[op.ticker].cantidad -= op.cantidad;
-      const avgCost = acc[op.ticker].cantidad > 0 ? acc[op.ticker].costoTotal / (acc[op.ticker].cantidad + op.cantidad) : 0;
-      acc[op.ticker].costoTotal -= op.cantidad * avgCost;
-    }
-    return acc;
-  }, {} as Record<string, { ticker: string; name: string; cantidad: number; costoTotal: number }>);
-
-  const portfolioArray = Object.values(portfolio).filter(p => p.cantidad > 0);
-
-  // Compute total portfolio values
-  const totalPortfolioValueUSD = portfolioArray.reduce((acc, item) => {
-    const avgPrice = item.costoTotal / item.cantidad;
-    const currentPrice = livePrices[item.ticker] ?? avgPrice;
-    return acc + (item.cantidad * currentPrice);
-  }, 0);
-
+  const portfolioArray = valuation.status === 'ready' ? valuation.positions : [];
+  const livePrices = valuation.status === 'ready' ? valuation.prices : {};
+  const lastUpdate = valuation.status === 'ready' ? valuation.lastUpdate : null;
+  const totalPortfolioValueUSD = valuation.status === 'ready' ? valuation.totalInversionesUSD : 0;
   const totalPortfolioCostoUSD = portfolioArray.reduce((acc, item) => acc + item.costoTotal, 0);
   const totalPnLUSD = totalPortfolioValueUSD - totalPortfolioCostoUSD;
 
@@ -347,6 +293,9 @@ export default function InvestmentsTab() {
               )}
             </div>
           </div>
+          {valuation.status !== 'ready' && (
+            <div className="p-6"><ValuationStatus valuation={valuation} /></div>
+          )}
           
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
@@ -362,7 +311,9 @@ export default function InvestmentsTab() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/50">
-                {portfolioArray.length === 0 ? (
+                {valuation.status !== 'ready' ? (
+                  <tr><td colSpan={7} className="px-6 py-8 text-center text-slate-500">Esperando una valuación completa…</td></tr>
+                ) : portfolioArray.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-6 py-8 text-center text-slate-500">
                       Tu portafolio está vacío. Realiza una compra o importa tu cartera para empezar.
@@ -419,7 +370,7 @@ export default function InvestmentsTab() {
                   })
                 )}
               </tbody>
-              {portfolioArray.length > 0 && (
+              {valuation.status === 'ready' && portfolioArray.length > 0 && (
                 <tfoot>
                   <tr className="bg-slate-900/60 border-t border-slate-700 font-semibold text-slate-200">
                     <td colSpan={5} className="px-6 py-3 text-right text-sm">TOTAL PORTAFOLIO:</td>

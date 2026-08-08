@@ -52,7 +52,7 @@ export default function AmChartsImporter({ onClose }: Props) {
       try {
         const json: AmChartsData[] = JSON.parse(event.target?.result as string);
         processAmChartsData(json);
-      } catch (error) {
+      } catch {
         alert("Error al leer el archivo JSON. Asegúrate de que tenga el formato correcto.");
       }
     };

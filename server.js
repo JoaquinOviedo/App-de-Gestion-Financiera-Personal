@@ -85,15 +85,18 @@ try {
 
 // 3. Iniciar el servidor de desarrollo de Vite
 const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const vite = spawn(npmCmd, ['run', 'dev'], { 
+const vite = spawn(npmCmd, ['run', 'dev', '--', '--host', 'localhost', '--port', '5173', '--strictPort'], {
   stdio: 'inherit' 
 });
+let viteExited = false;
+vite.on('exit', () => { viteExited = true; });
 
 const server = http.createServer();
 const wss = new WebSocketServer({ server });
 
 let activeConnections = 0;
 let timeout = null;
+let initialTimeout = null;
 
 // Lógica para enviar cambios a GitHub cuando la app se cierre
 const saveAndPushToGitHub = () => {
@@ -114,18 +117,12 @@ const saveAndPushToGitHub = () => {
   }
 };
 
-const initialTimeout = setTimeout(() => {
-  if (activeConnections === 0) {
-    console.log('No se detectaron conexiones al navegador. Cerrando...');
-    vite.kill();
-    saveAndPushToGitHub();
-    process.exit();
-  }
-}, 15000);
-
 wss.on('connection', (ws) => {
   activeConnections++;
-  clearTimeout(initialTimeout);
+  if (initialTimeout) {
+    clearTimeout(initialTimeout);
+    initialTimeout = null;
+  }
   if (timeout) {
     clearTimeout(timeout);
     timeout = null;
@@ -157,8 +154,49 @@ wss.on('connection', (ws) => {
   });
 });
 
-server.listen(3001, () => {
-  setTimeout(() => {
-    open('http://localhost:5173');
-  }, 1500);
+const waitForHttp = (url, timeoutMs = 60000) => new Promise((resolve, reject) => {
+  const startedAt = Date.now();
+  const check = () => {
+    if (viteExited) {
+      reject(new Error('Vite terminó antes de quedar disponible.'));
+      return;
+    }
+    const request = http.get(url, response => {
+      response.resume();
+      if (response.statusCode && response.statusCode < 500) {
+        resolve();
+        return;
+      }
+      retry();
+    });
+    request.setTimeout(1000, () => request.destroy());
+    request.on('error', retry);
+  };
+  const retry = () => {
+    if (Date.now() - startedAt >= timeoutMs) {
+      reject(new Error(`Vite no respondió después de ${timeoutMs / 1000} segundos.`));
+      return;
+    }
+    setTimeout(check, 250);
+  };
+  check();
+});
+
+server.listen(3001, async () => {
+  try {
+    await waitForHttp('http://localhost:5173');
+    await open('http://localhost:5173');
+    initialTimeout = setTimeout(() => {
+      if (activeConnections === 0) {
+        console.log('No se detectaron conexiones al navegador. Cerrando...');
+        vite.kill();
+        saveAndPushToGitHub();
+        process.exit();
+      }
+    }, 15000);
+  } catch (error) {
+    console.error('No se pudo iniciar la aplicación:', error.message);
+    if (!viteExited) vite.kill();
+    server.close(() => process.exit(1));
+  }
 });
