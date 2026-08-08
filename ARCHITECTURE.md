@@ -8,7 +8,7 @@ La aplicación tiene tres capas de ejecución:
 
 1. Una SPA React/Vite muestra las cuatro áreas funcionales: Presupuesto, Historial, Evolución e Inversiones.
 2. Zustand conserva el estado financiero persistente del usuario.
-3. `server.js` coordina Vite, un WebSocket local, el espejo JSON, la apertura/cierre del navegador y la sincronización Git.
+3. `server.js` coordina Vite, un WebSocket local, el espejo JSON y la apertura/cierre del navegador.
 
 Tecnologías principales:
 
@@ -121,9 +121,11 @@ Las APIs pueden fallar, responder con demora o entregar cierres diferidos. La UI
 3. `server.js` verifica Git y lanza Vite en el puerto estricto 5173.
 4. El servidor espera una respuesta HTTP válida antes de abrir el navegador.
 5. El frontend mantiene un heartbeat en `ws://localhost:3001`.
-6. Sin conexiones, el servidor cierra Vite y ejecuta la sincronización final.
+6. Sin conexiones, el servidor cierra Vite sin modificar Git.
 
 El temporizador inicial debe comenzar después de abrir el navegador; volver a una espera fija antes de comprobar Vite reintroduciría el error de página inaccesible al arrancar.
+
+La sincronización Git al cierre está desactivada por defecto. Sólo se ejecuta cuando `FINTECH_AUTO_GIT_SYNC=1`; esta opción existe por compatibilidad y no debe activarse en un entorno con cambios de código sin revisar.
 
 ## 8. Buenas prácticas ya presentes
 
@@ -136,13 +138,14 @@ El temporizador inicial debe comenzar después de abrir el navegador; volver a u
 - Snapshots idempotentes y normalizados en USD.
 - Compatibilidad de lectura con datos históricos anteriores.
 - Validación de readiness HTTP antes de abrir el navegador.
+- Cierre sin commits automáticos; la sincronización Git requiere opt-in explícito.
 
 ## 9. Mejoras recomendadas
 
 ### Prioridad alta
 
 1. **Unificar la persistencia:** definir `localStorage` o JSON como fuente canónica. Si el JSON debe ser recuperable automáticamente, agregar un handshake inicial servidor → frontend, versionado y resolución explícita de conflictos.
-2. **Desacoplar Git del cierre:** el `git add/commit/push` automático puede incluir cambios de código no relacionados, fallar con conflictos o modificar el repositorio sin revisión. Convertirlo en una acción optativa y separada del guardado financiero.
+2. **Desacoplar también la actualización Git del arranque:** el cierre ya no crea commits por defecto, pero `git fetch/pull` continúa acoplado al inicio. Conviene convertir la actualización de código en una acción manual y visible.
 3. **Reutilizar un único WebSocket:** actualmente existe un heartbeat persistente y se abre otra conexión para cada guardado. Centralizar la conexión, aplicar debounce y confirmar escrituras reduce carreras y conexiones innecesarias.
 4. **Agregar migraciones del store:** configurar versión y `migrate` en Zustand antes de seguir ampliando el esquema. Esto evita depender de campos opcionales indefinidamente.
 
@@ -169,4 +172,5 @@ El temporizador inicial debe comenzar después de abrir el navegador; volver a u
 - Preservar el significado de `precio_operacion` como costo/PPC y `precio_actual_usd` como último valor importado.
 - Mantener compatibilidad con registros históricos; cualquier migración destructiva debe ser explícita y respaldada.
 - No volver a abrir el navegador mediante un retraso fijo: comprobar siempre que Vite responda.
+- No habilitar `FINTECH_AUTO_GIT_SYNC` por defecto ni confundir el guardado financiero con el versionado del código.
 - Ejecutar `npm test`, `npm run lint` y `npm run build` después de modificar cálculos, tipos o persistencia.

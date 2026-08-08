@@ -39,7 +39,7 @@ Actualmente el JSON es un respaldo local, no la fuente que hidrata automáticame
 
 - Node.js 18 o superior.
 - npm.
-- Git configurado si se utilizará la sincronización automática incluida en `server.js`.
+- Git configurado para la verificación de actualizaciones al iniciar.
 
 ## Instalación y ejecución
 
@@ -88,9 +88,9 @@ npm run build
 - Espera una respuesta HTTP válida antes de abrir el navegador.
 - Recibe copias del estado por WebSocket.
 - Se apaga cuando deja de detectar una pestaña conectada.
-- Intenta crear un commit y subir cambios al cerrar.
+- Cierra Vite sin crear commits ni ejecutar `git push`.
 
-La sincronización Git automática forma parte del comportamiento actual. Antes de trabajar con cambios locales importantes conviene revisar [ARCHITECTURE.md](./ARCHITECTURE.md), donde se documentan sus riesgos y mejoras recomendadas.
+La sincronización de cierre sólo se habilita de forma explícita definiendo `FINTECH_AUTO_GIT_SYNC=1` antes de ejecutar `server.js`. Se mantiene desactivada por defecto para que cerrar la aplicación nunca modifique el historial Git.
 
 ## Documentación técnica
 

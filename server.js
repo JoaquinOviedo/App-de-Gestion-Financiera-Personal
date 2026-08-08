@@ -12,6 +12,7 @@ const __dirname = path.dirname(__filename);
 // Rutas del archivo JSON de base de datos
 const DB_FILE_NAME = 'finanzas_personales.json';
 const DB_PATH = path.join(__dirname, DB_FILE_NAME);
+const AUTO_GIT_SYNC_ENABLED = process.env.FINTECH_AUTO_GIT_SYNC === '1';
 
 // 1. Crear el JSON inicial si no existe
 if (!fs.existsSync(DB_PATH)) {
@@ -98,7 +99,7 @@ let activeConnections = 0;
 let timeout = null;
 let initialTimeout = null;
 
-// Lógica para enviar cambios a GitHub cuando la app se cierre
+// Sincronización opcional. Está desactivada por defecto para no crear commits al cerrar.
 const saveAndPushToGitHub = () => {
   console.log('Guardando cambios y subiendo a GitHub...');
   try {
@@ -145,9 +146,9 @@ wss.on('connection', (ws) => {
     activeConnections--;
     if (activeConnections === 0) {
       timeout = setTimeout(() => {
-        console.log('Navegador cerrado. Apagando e iniciando sincronización...');
+        console.log('Navegador cerrado. Apagando aplicación...');
         vite.kill();
-        saveAndPushToGitHub();
+        if (AUTO_GIT_SYNC_ENABLED) saveAndPushToGitHub();
         process.exit();
       }, 3000);
     }
@@ -190,7 +191,7 @@ server.listen(3001, async () => {
       if (activeConnections === 0) {
         console.log('No se detectaron conexiones al navegador. Cerrando...');
         vite.kill();
-        saveAndPushToGitHub();
+        if (AUTO_GIT_SYNC_ENABLED) saveAndPushToGitHub();
         process.exit();
       }
     }, 15000);
