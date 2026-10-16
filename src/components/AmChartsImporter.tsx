@@ -124,6 +124,7 @@ export default function AmChartsImporter({ onClose }: Props) {
       fecha: week.closeDate,
       valor_inversiones: week.avgUsd,
       valor_emergencia: 0,
+      valor_vacaciones: 0,
       total: week.avgUsd,
       origen: 'HISTORICO_AMCHARTS',
       nota: `Promedio semanal ${week.isoWeek}`,
@@ -193,7 +194,7 @@ export default function AmChartsImporter({ onClose }: Props) {
                   <div>
                     <div className="text-gray-400 text-sm">Modo de importación</div>
                     <div className="text-sm font-medium text-white mt-1">
-                      {replaceMode ? 'Reemplazar anteriores' : 'Añadir al historial'}
+                      {replaceMode ? 'Reemplazar sólo amCharts' : 'Añadir semanas nuevas'}
                     </div>
                   </div>
                   <button 
@@ -205,6 +206,11 @@ export default function AmChartsImporter({ onClose }: Props) {
                   </button>
                 </div>
               </div>
+
+              <p className="text-xs text-slate-400">
+                Los hitos automáticos nunca se eliminan. Si hay fondos de emergencia o vacaciones registrados en la misma semana,
+                se conservan en el dato importado; amCharts no proporciona esos valores.
+              </p>
 
               {/* Preview Table */}
               <div className="border border-gray-800 rounded-lg overflow-hidden bg-gray-900/50">

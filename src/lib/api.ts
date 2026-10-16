@@ -7,11 +7,12 @@ export interface AssetPrice {
 
 // List of CORS proxy options to try in order
 const CORS_PROXIES = [
+  (url: string) => `http://localhost:3002/api/yahoo?url=${encodeURIComponent(url)}`,
   (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
   (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
 ];
 
-async function fetchWithProxy(url: string): Promise<Response | null> {
+export async function fetchWithProxy(url: string): Promise<Response | null> {
   for (const proxyFn of CORS_PROXIES) {
     try {
       const proxyUrl = proxyFn(url);

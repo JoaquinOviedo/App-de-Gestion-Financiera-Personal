@@ -3,6 +3,8 @@ import { useStore } from '../store/useStore';
 import { getCedearRatio } from './cedears';
 import { fetchDolarMEP } from './useDolarMEP';
 import { consolidatePositions, PortfolioPosition, resolveTickerPrice, selectLastKnownPrice } from './portfolioValuationCore';
+import { emergencyFundValueUSD } from './emergencyFund';
+import { vacationFundValueUSD } from './vacationFund';
 
 interface ValuationLoading { status: 'loading'; retry: () => void }
 interface ValuationError {
@@ -19,6 +21,7 @@ export interface ValuationReady {
   positions: PortfolioPosition[];
   totalInversionesUSD: number;
   valorEmergenciaUSD: number;
+  valorVacacionesUSD: number;
   totalPatrimonioUSD: number;
   retry: () => void;
 }
@@ -54,6 +57,7 @@ export function PortfolioValuationProvider({ children }: { children: ReactNode }
   const operaciones = useStore(state => state.inversiones.operaciones);
   const ratios = useStore(state => state.cedear_ratios);
   const fondo = useStore(state => state.fondo_emergencia);
+  const fondoVacaciones = useStore(state => state.fondo_vacaciones);
   const [market, setMarket] = useState<MarketState>({ status: 'loading' });
   const [refreshKey, setRefreshKey] = useState(0);
   const requestId = useRef(0);
@@ -130,9 +134,8 @@ export function PortfolioValuationProvider({ children }: { children: ReactNode }
 
     const positions = consolidatePositions(operaciones, market.prices);
     const totalInversionesUSD = positions.reduce((total, position) => total + position.valorActualUSD, 0);
-    const valorEmergenciaUSD = fondo.moneda === 'USD'
-      ? fondo.saldo_actual
-      : fondo.saldo_actual / market.cotizacionMEP;
+    const valorEmergenciaUSD = emergencyFundValueUSD(fondo, market.cotizacionMEP);
+    const valorVacacionesUSD = vacationFundValueUSD(fondoVacaciones, market.cotizacionMEP);
 
     return {
       status: 'ready',
@@ -142,10 +145,11 @@ export function PortfolioValuationProvider({ children }: { children: ReactNode }
       positions,
       totalInversionesUSD,
       valorEmergenciaUSD,
-      totalPatrimonioUSD: totalInversionesUSD + valorEmergenciaUSD,
+      valorVacacionesUSD,
+      totalPatrimonioUSD: totalInversionesUSD + valorEmergenciaUSD + valorVacacionesUSD,
       retry,
     };
-  }, [fondo, market, operaciones, retry]);
+  }, [fondo, fondoVacaciones, market, operaciones, retry]);
 
   return <PortfolioValuationContext.Provider value={value}>{children}</PortfolioValuationContext.Provider>;
 }

@@ -11,10 +11,14 @@ import CurrentPortfolioImporter from './components/CurrentPortfolioImporter';
 import CedearRatioImporter from './components/CedearRatioImporter';
 import AdminModal from './components/AdminModal';
 import { usePortfolioValuation } from './lib/portfolioValuation';
+import { normalizeEmergencyFund } from './lib/emergencyFund';
+import { normalizeVacationFund } from './lib/vacationFund';
+import { createDatabaseBackup, parseDatabaseBackup } from './lib/databaseBackup';
 
 const TAB_IDS = ['budget', 'history', 'portfolio', 'investments'] as const;
 type AppTab = typeof TAB_IDS[number];
 const ACTIVE_TAB_STORAGE_KEY = 'fintech_active_tab';
+const LOCAL_SERVER_WS_URL = 'ws://localhost:3002';
 
 function getInitialTab(): AppTab {
   const savedTab = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
@@ -44,7 +48,7 @@ function App() {
     const connect = () => {
       if (isDisposed) return;
       try {
-        ws = new WebSocket('ws://localhost:3001');
+        ws = new WebSocket(LOCAL_SERVER_WS_URL);
         
         ws.onopen = () => {
           pingInterval = setInterval(() => {
@@ -86,11 +90,25 @@ function App() {
 
   // Auto-save local state to server.js whenever estadoCompleto changes
   useEffect(() => {
-    // Evitar guardar estado inicial vacío
-    if (!estadoCompleto.presupuesto || estadoCompleto.presupuesto.ingreso_mensual === 0) return;
+    // Evitar guardar el estado inicial vacío sin omitir fondos cuando aún no hay ingresos cargados.
+    const emergency = normalizeEmergencyFund(estadoCompleto.fondo_emergencia);
+    const vacations = normalizeVacationFund(estadoCompleto.fondo_vacaciones);
+    const hasFinancialData = estadoCompleto.presupuesto.ingreso_mensual !== 0
+      || estadoCompleto.presupuesto.categorias.length > 0
+      || estadoCompleto.presupuesto.asignacion_emergencia > 0
+      || estadoCompleto.presupuesto.asignacion_vacaciones > 0
+      || emergency.saldo_ars > 0
+      || emergency.saldo_usd > 0
+      || emergency.meta_meses !== 6
+      || vacations.saldo_ars > 0
+      || vacations.saldo_usd > 0
+      || vacations.objetivo_usd > 0
+      || estadoCompleto.inversiones.operaciones.length > 0
+      || estadoCompleto.historial_patrimonio.some(record => record.total !== 0);
+    if (!hasFinancialData) return;
     
     try {
-      const ws = new WebSocket('ws://localhost:3001');
+      const ws = new WebSocket(LOCAL_SERVER_WS_URL);
       ws.onerror = () => {
         // Ignorar si el servidor backend opcional no responde
       };
@@ -101,7 +119,10 @@ function App() {
             version: estadoCompleto.version,
             presupuesto: estadoCompleto.presupuesto,
             fondo_emergencia: estadoCompleto.fondo_emergencia,
+            fondo_vacaciones: estadoCompleto.fondo_vacaciones,
             inversiones: estadoCompleto.inversiones,
+            movimientos_portafolio: estadoCompleto.movimientos_portafolio,
+            dividendos_api: estadoCompleto.dividendos_api,
             historial_patrimonio: estadoCompleto.historial_patrimonio,
             cedear_ratios: estadoCompleto.cedear_ratios
           }
@@ -122,19 +143,22 @@ function App() {
     checkAndCreateSnapshot({
       valor_inversiones_usd: valuation.totalInversionesUSD,
       valor_emergencia_usd: valuation.valorEmergenciaUSD,
+      valor_vacaciones_usd: valuation.valorVacacionesUSD,
       cotizacion_mep: valuation.cotizacionMEP,
       fecha_cotizacion: valuation.lastUpdate.toISOString(),
     });
   }, [checkAndCreateSnapshot, valuation]);
 
   const handleExport = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(estadoCompleto, null, 2));
+    const data = createDatabaseBackup(estadoCompleto);
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
     const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href",     dataStr);
+    downloadAnchorNode.setAttribute('href', url);
     downloadAnchorNode.setAttribute("download", "finanzas_personales.json");
     document.body.appendChild(downloadAnchorNode); 
     downloadAnchorNode.click();
     downloadAnchorNode.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
 
   const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -143,18 +167,17 @@ function App() {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const json = JSON.parse(e.target?.result as string);
-        if (json.version) {
-          importData(json);
-          alert('Datos importados correctamente.');
-        } else {
-          alert('Formato de archivo inválido.');
-        }
-      } catch {
-        alert('Error al leer el archivo JSON.');
+        const restored = parseDatabaseBackup(JSON.parse(e.target?.result as string));
+        importData(restored);
+        setShowAdminModal(false);
+        alert('Datos importados correctamente.');
+      } catch (error) {
+        alert(error instanceof Error ? error.message : 'Error al leer el archivo JSON.');
       }
     };
+    reader.onerror = () => alert('No se pudo leer el archivo JSON.');
     reader.readAsText(file);
+    event.target.value = '';
   };
 
   const tabs: Array<{ id: AppTab; label: string; icon: typeof LayoutDashboard; component: React.ComponentType }> = [

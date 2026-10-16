@@ -1,2 +1,5 @@
 Set WshShell = CreateObject("WScript.Shell")
-WshShell.Run "cmd /c node server.js", 0, False
+Set FSO = CreateObject("Scripting.FileSystemObject")
+AppDir = FSO.GetParentFolderName(WScript.ScriptFullName)
+ServerPath = FSO.BuildPath(AppDir, "server.js")
+WshShell.Run "cmd.exe /d /c node """ & ServerPath & """", 0, False

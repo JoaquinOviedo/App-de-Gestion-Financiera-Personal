@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { AppStore, AppState } from '../types';
+import { normalizeEmergencyFund } from '../lib/emergencyFund';
+import { normalizeBudget } from '../lib/budget';
+import { mergeAmChartsHistory } from '../lib/amChartsHistory';
+import { normalizeVacationFund } from '../lib/vacationFund';
 
 const initialState: AppState = {
   version: "1.0",
@@ -8,16 +12,26 @@ const initialState: AppState = {
     ingreso_mensual: 0,
     categorias: [],
     asignacion_inversiones: 0,
+    asignacion_emergencia: 0,
+    asignacion_vacaciones: 0,
     moneda: 'ARS'
   },
   fondo_emergencia: {
-    saldo_actual: 0,
+    saldo_ars: 0,
+    saldo_usd: 0,
     meta_meses: 6,
-    moneda: 'ARS'
+    incluir_usd_en_cobertura: false
+  },
+  fondo_vacaciones: {
+    saldo_ars: 0,
+    saldo_usd: 0,
+    objetivo_usd: 0,
   },
   inversiones: {
     operaciones: []
   },
+  movimientos_portafolio: [],
+  dividendos_api: {},
   historial_patrimonio: []
 };
 
@@ -31,6 +45,12 @@ export const useStore = create<AppStore>()(
         
       setAsignacionInversiones: (monto) =>
         set((state) => ({ presupuesto: { ...state.presupuesto, asignacion_inversiones: monto } })),
+
+      setAsignacionEmergencia: (monto) =>
+        set((state) => ({ presupuesto: { ...state.presupuesto, asignacion_emergencia: Number.isFinite(monto) ? Math.max(0, monto) : 0 } })),
+
+      setAsignacionVacaciones: (monto) =>
+        set((state) => ({ presupuesto: { ...state.presupuesto, asignacion_vacaciones: Number.isFinite(monto) ? Math.max(0, monto) : 0 } })),
 
       setPresupuestoMoneda: (moneda) =>
         set((state) => ({ presupuesto: { ...state.presupuesto, moneda } })),
@@ -90,8 +110,33 @@ export const useStore = create<AppStore>()(
           }
         })),
 
-      setFondoEmergencia: (saldo, metaMeses, moneda) =>
-        set((state) => ({ fondo_emergencia: { saldo_actual: saldo, meta_meses: metaMeses, moneda: moneda || state.fondo_emergencia.moneda || 'ARS' } })),
+      setFondoEmergencia: (saldos, metaMeses) =>
+        set((state) => ({ fondo_emergencia: normalizeEmergencyFund({
+          moneda_legacy: state.fondo_emergencia.moneda_legacy,
+          saldo_ars: saldos.ARS,
+          saldo_usd: saldos.USD,
+          meta_meses: metaMeses,
+          incluir_usd_en_cobertura: state.fondo_emergencia.incluir_usd_en_cobertura,
+        }) })),
+
+      setIncluirUsdEnCobertura: (incluir) =>
+        set((state) => ({ fondo_emergencia: normalizeEmergencyFund({
+          ...state.fondo_emergencia,
+          incluir_usd_en_cobertura: incluir,
+        }) })),
+
+      setFondoVacaciones: (saldos) =>
+        set((state) => ({ fondo_vacaciones: normalizeVacationFund({
+          ...state.fondo_vacaciones,
+          saldo_ars: saldos.ARS,
+          saldo_usd: saldos.USD,
+        }) })),
+
+      setObjetivoVacaciones: (objetivoUSD) =>
+        set((state) => ({ fondo_vacaciones: normalizeVacationFund({
+          ...state.fondo_vacaciones,
+          objetivo_usd: objetivoUSD,
+        }) })),
 
       addOperacion: (op) =>
         set((state) => ({
@@ -116,6 +161,13 @@ export const useStore = create<AppStore>()(
       checkAndCreateSnapshot: (valuation) => {
         const state = get();
         const historial = state.historial_patrimonio;
+        const hasAssets = state.inversiones.operaciones.length > 0
+          || state.fondo_emergencia.saldo_ars > 0
+          || state.fondo_emergencia.saldo_usd > 0
+          || state.fondo_vacaciones.saldo_ars > 0
+          || state.fondo_vacaciones.saldo_usd > 0
+          || historial.some(record => record.total !== 0);
+        if (!hasAssets) return;
         
         // Find last snapshot
         const snapshots = historial.filter(h => h.origen === 'AUTO_SNAPSHOT');
@@ -142,7 +194,8 @@ export const useStore = create<AppStore>()(
             fecha: now.toISOString().split('T')[0],
             valor_inversiones: valuation.valor_inversiones_usd,
             valor_emergencia: valuation.valor_emergencia_usd,
-            total: valuation.valor_inversiones_usd + valuation.valor_emergencia_usd,
+            valor_vacaciones: valuation.valor_vacaciones_usd,
+            total: valuation.valor_inversiones_usd + valuation.valor_emergencia_usd + valuation.valor_vacaciones_usd,
             origen: 'AUTO_SNAPSHOT',
             nota: 'Snapshot Automático Semanal',
             cotizacion_mep: valuation.cotizacion_mep,
@@ -152,20 +205,18 @@ export const useStore = create<AppStore>()(
         }
       },
 
-      importData: (data) => set(() => data),
+      importData: (data) => set(() => ({
+        ...data,
+        presupuesto: normalizeBudget(data.presupuesto),
+        fondo_emergencia: normalizeEmergencyFund(data.fondo_emergencia),
+        fondo_vacaciones: normalizeVacationFund(data.fondo_vacaciones),
+        movimientos_portafolio: data.movimientos_portafolio || [],
+        dividendos_api: data.dividendos_api || {}
+      })),
 
-      importarHistorialAmCharts: (registros, reemplazarPrevios) => set((state) => {
-        let nuevoHistorial = [...state.historial_patrimonio];
-        
-        if (reemplazarPrevios) {
-          nuevoHistorial = nuevoHistorial.filter(r => r.origen !== 'HISTORICO_AMCHARTS');
-        }
-        
-        nuevoHistorial.push(...registros);
-        nuevoHistorial.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
-        
-        return { historial_patrimonio: nuevoHistorial };
-      }),
+      importarHistorialAmCharts: (registros, reemplazarPrevios) => set((state) => ({
+        historial_patrimonio: mergeAmChartsHistory(state.historial_patrimonio, registros, reemplazarPrevios),
+      })),
 
       importarOperacionesBroker: (operacionesNuevas, ingresosNuevos) => set((state) => {
         const nuevasOperaciones = [...state.inversiones.operaciones, ...operacionesNuevas];
@@ -196,6 +247,24 @@ export const useStore = create<AppStore>()(
         }
       })),
 
+      addMovimientoPortafolio: (movimiento) => set((state) => ({
+        movimientos_portafolio: [
+          ...(state.movimientos_portafolio || []),
+          { ...movimiento, id: crypto.randomUUID() }
+        ]
+      })),
+
+      removeMovimientoPortafolio: (id) => set((state) => ({
+        movimientos_portafolio: (state.movimientos_portafolio || []).filter(movimiento => movimiento.id !== id)
+      })),
+
+      setDividendApiHistory: (history) => set((state) => ({
+        dividendos_api: {
+          ...(state.dividendos_api || {}),
+          [history.ticker]: history
+        }
+      })),
+
       cedear_ratios: {},
 
       setCedearRatios: (ratios) => set((state) => ({
@@ -208,6 +277,16 @@ export const useStore = create<AppStore>()(
     }),
     {
       name: 'finanzas_personales', // localStorage key
+      merge: (persisted, current) => {
+        const saved = persisted as Partial<AppState> | undefined;
+        return {
+          ...current,
+          ...saved,
+          presupuesto: normalizeBudget(saved?.presupuesto),
+          fondo_emergencia: normalizeEmergencyFund(saved?.fondo_emergencia),
+          fondo_vacaciones: normalizeVacationFund(saved?.fondo_vacaciones),
+        } as AppStore;
+      },
     }
   )
 );

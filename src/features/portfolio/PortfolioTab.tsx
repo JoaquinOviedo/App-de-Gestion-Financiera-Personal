@@ -1,205 +1,348 @@
 import { useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { TrendingUp, TrendingDown, Wallet, Shield, LineChart } from 'lucide-react';
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis
+} from 'recharts';
+import { Calculator, Coins, LineChart as LineChartIcon, Plane, RefreshCw, Shield, Wallet } from 'lucide-react';
 import { usePortfolioValuation } from '../../lib/portfolioValuation';
+import {
+  buildPerformanceSeries,
+  calculateDividendShield,
+  PortfolioHistoryPoint
+} from '../../lib/portfolioAnalytics';
 import ValuationStatus from '../../components/ValuationStatus';
+import DividendSimulator from './DividendSimulator';
+import { usePortfolioDividends } from '../../lib/portfolioDividends';
+import { sortHistoryForChart } from '../../lib/amChartsHistory';
+import { buildYieldBasedHistoricalMonthlyDividends } from '../../lib/historicalDividends';
+
+type ChartView = 'TOTAL' | 'INVERSIONES' | 'EMERGENCIA' | 'VACACIONES' | 'DIVIDENDOS';
+type PeriodFilter = '1M' | '6M' | '1Y' | 'TODO';
+
+const chartViews: Array<{ id: ChartView; label: string }> = [
+  { id: 'TOTAL', label: 'Patrimonio' },
+  { id: 'INVERSIONES', label: 'Inversiones' },
+  { id: 'EMERGENCIA', label: 'Emergencia' },
+  { id: 'VACACIONES', label: 'Vacaciones' },
+  { id: 'DIVIDENDOS', label: 'Dividendos' }
+];
+
+const periodFilters: Array<{ id: PeriodFilter; label: string }> = [
+  { id: '1M', label: '1 mes' },
+  { id: '6M', label: '6 meses' },
+  { id: '1Y', label: '1 año' },
+  { id: 'TODO', label: 'Todo' }
+];
+
+const chartColors: Record<ChartView, string> = {
+  TOTAL: '#10b981',
+  INVERSIONES: '#3b82f6',
+  EMERGENCIA: '#eab308',
+  VACACIONES: '#8b5cf6',
+  DIVIDENDOS: '#22c55e'
+};
+
+const dataKeys: Record<Exclude<ChartView, 'DIVIDENDOS'>, string> = {
+  TOTAL: 'total',
+  INVERSIONES: 'valor_inversiones',
+  EMERGENCIA: 'valor_emergencia',
+  VACACIONES: 'valor_vacaciones',
+};
+
+const viewLabels: Record<ChartView, string> = {
+  TOTAL: 'Patrimonio total',
+  INVERSIONES: 'Inversiones',
+  EMERGENCIA: 'Fondo de emergencia',
+  VACACIONES: 'Fondo de vacaciones',
+  DIVIDENDOS: 'Dividendos netos TTM'
+};
+
+function formatDate(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0')
+  ].join('-');
+}
+
+function getPeriodStart(endDate: string, period: PeriodFilter) {
+  if (period === 'TODO') return undefined;
+  const date = new Date(`${endDate}T12:00:00`);
+
+  if (period === '1M') date.setMonth(date.getMonth() - 1);
+  if (period === '6M') date.setMonth(date.getMonth() - 6);
+  if (period === '1Y') date.setFullYear(date.getFullYear() - 1);
+
+  return formatDate(date);
+}
+
+function formatUSD(value: number) {
+  return `US$ ${Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
 export default function PortfolioTab() {
-  const historial_patrimonio = useStore(state => state.historial_patrimonio);
-  const fondo_emergencia = useStore(state => state.fondo_emergencia);
+  const historial = useStore(state => state.historial_patrimonio);
+  const fondoEmergencia = useStore(state => state.fondo_emergencia);
+  const presupuesto = useStore(state => state.presupuesto);
+  const movements = useStore(state => state.movimientos_portafolio || []);
   const valuation = usePortfolioValuation();
-
-  const [filter, setFilter] = useState<'TOTAL' | 'INVERSIONES' | 'EMERGENCIA'>('TOTAL');
+  const dividends = usePortfolioDividends(valuation.status === 'ready' ? valuation.positions : []);
+  const [view, setView] = useState<ChartView>('TOTAL');
+  const [period, setPeriod] = useState<PeriodFilter>('1Y');
+  const [showSimulator, setShowSimulator] = useState(false);
 
   if (valuation.status !== 'ready') return <ValuationStatus valuation={valuation} />;
 
   const cotizacionMEP = valuation.cotizacionMEP;
-  const currentInversionesValueUSD = valuation.totalInversionesUSD;
-  const fondoIsUSD = fondo_emergencia.moneda === 'USD';
-  const currentEmergenciaValueUSD = valuation.valorEmergenciaUSD;
-  
-  const currentRecord = {
+  const fondoIsUSD = (fondoEmergencia.moneda_legacy || fondoEmergencia.moneda) === 'USD';
+  const currentRecord: PortfolioHistoryPoint = {
     fecha: new Date().toISOString().split('T')[0],
-    valor_inversiones: currentInversionesValueUSD,
-    valor_emergencia: currentEmergenciaValueUSD,
-    total: currentInversionesValueUSD + currentEmergenciaValueUSD,
-    id: 'current',
-    origen: 'AUTO_SNAPSHOT' as const
+    valor_inversiones: valuation.totalInversionesUSD,
+    valor_emergencia: valuation.valorEmergenciaUSD,
+    valor_vacaciones: valuation.valorVacacionesUSD,
+    total: valuation.totalPatrimonioUSD
   };
 
-  const chartData = [...historial_patrimonio]
-    .map(r => {
-      // Historical investment values: use balance_usd if available (from amCharts import), otherwise use stored value (already in USD)
-      const valorInversionesUSD = r.balance_usd ?? r.valor_inversiones;
-      // Historical emergency values: convert ARS → USD. If no rate available, show 0 to avoid inflating chart.
-      const valorEmergenciaUSD = r.valores_normalizados_usd
-        ? r.valor_emergencia
+  const normalizedHistory: PortfolioHistoryPoint[] = sortHistoryForChart(historial)
+    .map(record => {
+      const valorInversionesUSD = record.balance_usd ?? record.valor_inversiones;
+      const valorEmergenciaUSD = record.valores_normalizados_usd
+        ? record.valor_emergencia
         : fondoIsUSD
-        ? r.valor_emergencia
-        : (cotizacionMEP > 0 ? r.valor_emergencia / cotizacionMEP : 0);
+          ? record.valor_emergencia
+          : cotizacionMEP > 0
+            ? record.valor_emergencia / cotizacionMEP
+            : 0;
+      const valorVacacionesUSD = record.valor_vacaciones ?? 0;
+
       return {
-        ...r,
+        fecha: record.fecha,
         valor_inversiones: valorInversionesUSD,
         valor_emergencia: valorEmergenciaUSD,
-        total: valorInversionesUSD + valorEmergenciaUSD
+        valor_vacaciones: valorVacacionesUSD,
+        total: valorInversionesUSD + valorEmergenciaUSD + valorVacacionesUSD
       };
-    })
-    .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime())
-    .concat(currentRecord);
+    });
 
-  const getMetricCards = () => {
-    if (chartData.length < 2) return null;
-    
-    const current = chartData[chartData.length - 1].total;
-    
-    const calculateGrowth = (monthsAgo: number) => {
-      const pastDate = new Date();
-      pastDate.setMonth(pastDate.getMonth() - monthsAgo);
-      
-      let closestRecord = chartData[0];
-      let minDiff = Infinity;
-      
-      chartData.slice(0, -1).forEach(record => {
-        const diff = Math.abs(new Date(record.fecha).getTime() - pastDate.getTime());
-        if (diff < minDiff) {
-          minDiff = diff;
-          closestRecord = record;
-        }
-      });
-      
-      const growth = current - closestRecord.total;
-      const pct = closestRecord.total > 0 ? (growth / closestRecord.total) * 100 : 0;
-      
-      return {
-        amount: growth,
-        percentage: pct,
-        isPositive: growth >= 0
-      };
-    };
+  const pointsByDate = new Map<string, PortfolioHistoryPoint>();
+  [...normalizedHistory, currentRecord]
+    .sort((a, b) => a.fecha.localeCompare(b.fecha))
+    .forEach(point => pointsByDate.set(point.fecha, point));
 
-    const metrics = [
-      { label: 'Último Mes', data: calculateGrowth(1) },
-      { label: '6 Meses', data: calculateGrowth(6) },
-      { label: '1 Año', data: calculateGrowth(12) }
-    ];
+  const performanceSeries = buildPerformanceSeries([...pointsByDate.values()], movements);
+  const latestDate = performanceSeries[performanceSeries.length - 1]?.fecha || currentRecord.fecha;
+  const periodStart = getPeriodStart(latestDate, period);
+  const visibleSeries = performanceSeries.filter(point => !periodStart || point.fecha >= periodStart);
+  const ttmStartDate = getPeriodStart(latestDate, '1Y') || latestDate;
+  const historyStartDate = performanceSeries[0]?.fecha || latestDate;
+  const chartStartDate = period === 'TODO'
+    ? historyStartDate
+    : periodStart || ttmStartDate;
+  const dividendsLastYear = dividends.status === 'ready'
+    ? dividends.analytics.estimatedCurrentTrailingTwelveMonthsUSD
+    : 0;
+  const currentDividendYield = dividends.status === 'ready' && valuation.totalInversionesUSD > 0
+    ? (dividendsLastYear / valuation.totalInversionesUSD) * 100
+    : 0;
+  const dividendSeries = buildYieldBasedHistoricalMonthlyDividends(
+    performanceSeries,
+    currentDividendYield,
+    historial.length > 0 ? historyStartDate : null,
+    latestDate,
+  ).filter(point => {
+    const month = point.fecha;
+    return (!chartStartDate || month >= chartStartDate.slice(0, 7)) && month <= latestDate.slice(0, 7);
+  });
 
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {metrics.map((m, i) => (
-          <div key={i} className="bg-slate-800/50 border border-slate-700/50 p-6 rounded-2xl backdrop-blur-sm relative overflow-hidden">
-            <div className={`absolute top-0 right-0 w-24 h-24 blur-2xl rounded-full opacity-20 ${m.data.isPositive ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
-            <p className="text-slate-400 font-medium mb-1">{m.label}</p>
-            <div className="flex items-end gap-3">
-              <h4 className={`text-2xl font-bold ${m.data.isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-                {m.data.isPositive ? '+' : ''}US$ {Math.abs(m.data.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </h4>
-              <span className={`flex items-center text-sm font-semibold mb-1 ${m.data.isPositive ? 'text-emerald-500' : 'text-red-500'}`}>
-                {m.data.isPositive ? <TrendingUp size={16} className="mr-1" /> : <TrendingDown size={16} className="mr-1" />}
-                {m.data.percentage.toFixed(2)}%
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  const getChartColor = () => {
-    switch (filter) {
-      case 'INVERSIONES': return '#3b82f6';
-      case 'EMERGENCIA': return '#eab308';
-      default: return '#10b981';
-    }
-  };
-
-  const getDataKey = () => {
-    switch (filter) {
-      case 'INVERSIONES': return 'valor_inversiones';
-      case 'EMERGENCIA': return 'valor_emergencia';
-      default: return 'total';
-    }
-  };
+  const monthlyExpenses = presupuesto.categorias.reduce((categoryTotal, category) => (
+    categoryTotal + category.subgastos.reduce((expenseTotal, expense) => (
+      expenseTotal + (expense.costo_unitario * expense.frecuencia)
+    ), 0)
+  ), 0);
+  const monthlyExpensesUSD = presupuesto.moneda === 'USD'
+    ? monthlyExpenses
+    : cotizacionMEP > 0
+      ? monthlyExpenses / cotizacionMEP
+      : 0;
+  const annualExpensesUSD = monthlyExpensesUSD * 12;
+  const dividendShield = dividends.status === 'ready'
+    ? calculateDividendShield(dividendsLastYear, annualExpensesUSD)
+    : null;
+  const selectedColor = chartColors[view];
+  const selectedDataKey = view === 'DIVIDENDOS' ? 'dividendos' : dataKeys[view];
+  const chartHasData = view === 'DIVIDENDOS'
+    ? dividends.status === 'ready' && currentDividendYield > 0 && dividendSeries.length > 0
+    : visibleSeries.length > 0;
 
   return (
     <div className="space-y-6">
-      
-      {getMetricCards()}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-100">Evolución y rendimiento</h2>
+          <p className="text-sm text-slate-400 mt-1">Separá crecimiento de mercado, capital agregado e ingresos por dividendos.</p>
+        </div>
+        <div className="flex flex-wrap gap-2 self-start">
+          <button
+            type="button"
+            onClick={() => setShowSimulator(current => !current)}
+            disabled={dividends.status !== 'ready'}
+            title={dividends.status !== 'ready' ? 'Esperando los dividendos obtenidos por API' : undefined}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-wait"
+          >
+            <Calculator size={16} /> {dividends.status !== 'ready' ? 'Calculando dividendos…' : showSimulator ? 'Ocultar simulador' : 'Simular dividendos'}
+          </button>
+        </div>
+      </div>
 
-      <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-6 backdrop-blur-sm">
-        <div className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
-          <div>
-            <h3 className="text-xl font-semibold text-slate-200">Evolución del Patrimonio (en USD)</h3>
-            <p className="text-xs text-slate-400 mt-1">Todos los valores se expresan en Dólares Estadounidenses (USD)</p>
+      {showSimulator && (
+        <DividendSimulator
+          currentCapitalUSD={valuation.totalInversionesUSD}
+          currentDividendYieldPct={currentDividendYield}
+          currentDividendShieldPct={dividendShield}
+          currentDividendGrowthPct={dividends.analytics.growthYoYPct}
+          monthlyExpensesUSD={monthlyExpensesUSD}
+        />
+      )}
+
+      {dividends.status === 'error' && (
+        <div role="alert" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          <span>{dividends.message}. Reintentá para actualizar las estimaciones automáticas.</span>
+          <button type="button" onClick={dividends.retry} className="inline-flex items-center gap-2 text-amber-100 hover:text-white font-medium">
+            <RefreshCw size={14} /> Reintentar
+          </button>
+        </div>
+      )}
+
+      {dividends.status === 'ready' && (dividends.unavailableTickers.length > 0 || dividends.staleTickers.length > 0) && (
+        <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 px-4 py-3 text-xs text-blue-200">
+          {dividends.unavailableTickers.length > 0 && `Sin historial público de dividendos: ${dividends.unavailableTickers.join(', ')}. `}
+          {dividends.staleTickers.length > 0 && `Se usa el último caché disponible para: ${dividends.staleTickers.join(', ')}.`}
+        </div>
+      )}
+
+      <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-5 sm:p-6 backdrop-blur-sm">
+        <div className="flex flex-col gap-5 mb-6">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0 flex-1">
+              <h3 className="text-lg font-semibold text-slate-200">
+                {viewLabels[view]} (USD)
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                {view === 'DIVIDENDOS'
+                    ? 'Estimación anual neta por mes: yield vigente aplicado al capital histórico. No son pagos reales.'
+                    : 'Valores históricos y valuación actual expresados en USD.'}
+              </p>
+            </div>
+            <div className="shrink-0 self-start">
+              <div className="flex flex-nowrap bg-slate-900/50 p-1 rounded-lg border border-slate-700/50">
+                {periodFilters.map(option => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setPeriod(option.id)}
+                    className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-md text-xs font-medium transition-all ${period === option.id ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-          
-          <div className="flex bg-slate-900/50 p-1 rounded-xl border border-slate-700/50">
-            <button 
-              onClick={() => setFilter('TOTAL')}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${filter === 'TOTAL' ? 'bg-emerald-500/20 text-emerald-400' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              Total
-            </button>
-            <button 
-              onClick={() => setFilter('INVERSIONES')}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${filter === 'INVERSIONES' ? 'bg-blue-500/20 text-blue-400' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              <Wallet size={14} /> Inversiones
-            </button>
-            <button 
-              onClick={() => setFilter('EMERGENCIA')}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${filter === 'EMERGENCIA' ? 'bg-yellow-500/20 text-yellow-400' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              <Shield size={14} /> Emergencia
-            </button>
+
+          <div className="flex flex-wrap gap-2">
+            {chartViews.map(option => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setView(option.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${view === option.id ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' : 'text-slate-400 border-slate-700/50 hover:text-slate-200 hover:bg-slate-700/30'}`}
+              >
+                {option.id === 'INVERSIONES' && <Wallet size={13} className="inline mr-1.5 -mt-0.5" />}
+                {option.id === 'EMERGENCIA' && <Shield size={13} className="inline mr-1.5 -mt-0.5" />}
+                {option.id === 'VACACIONES' && <Plane size={13} className="inline mr-1.5 -mt-0.5" />}
+                {option.id === 'DIVIDENDOS' && <Coins size={13} className="inline mr-1.5 -mt-0.5" />}
+                {option.label}
+              </button>
+            ))}
           </div>
         </div>
 
         <div className="h-[400px] w-full">
-          {chartData.length > 0 ? (
+          {!chartHasData ? (
+            <div className="w-full h-full flex flex-col items-center justify-center text-slate-500">
+              <LineChartIcon size={48} className="mb-4 opacity-50" />
+              <p>{view === 'DIVIDENDOS'
+                ? currentDividendYield > 0
+                  ? 'No hay capital histórico para el período seleccionado.'
+                  : 'No hay un yield positivo disponible para estimar dividendos.'
+                : 'No hay datos para graficar.'}</p>
+              <p className="text-sm mt-1">{view === 'DIVIDENDOS'
+                ? 'La serie toma el yield neto vigente y lo aplica al capital de cada hito.'
+                : 'Ampliá el período seleccionado o esperá una nueva actualización.'}</p>
+            </div>
+          ) : view === 'DIVIDENDOS' ? (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+              <LineChart data={dividendSeries} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                <XAxis dataKey="fecha" stroke="#94a3b8" fontSize={12} tickMargin={10} />
+                <YAxis stroke="#94a3b8" fontSize={12} tickFormatter={value => `US$ ${Number(value).toFixed(0)}`} />
+                <Tooltip
+                  cursor={{ fill: '#334155', opacity: 0.2 }}
+                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '0.75rem' }}
+                  itemStyle={{ color: selectedColor, fontWeight: 'bold' }}
+                  formatter={(value, _name, item) => {
+                    const quality = item.payload?.calidad;
+                    const suffix = quality === 'ESTIMADO'
+                      ? ' (estimado)'
+                      : quality === 'MIXTO'
+                        ? ' (parte estimada)'
+                        : '';
+                    return [formatUSD(Number(value || 0)), `Dividendos netos TTM${suffix}`];
+                  }}
+                />
+                <Line type="monotone" dataKey="dividendos" name="Dividendos netos TTM" stroke={selectedColor} strokeWidth={3} dot={dividendSeries.length <= 24 ? { r: 4, fill: selectedColor } : false} activeDot={{ r: 6 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={visibleSeries} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={getChartColor()} stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor={getChartColor()} stopOpacity={0}/>
+                    <stop offset="5%" stopColor={selectedColor} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={selectedColor} stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                <XAxis 
-                  dataKey="fecha" 
-                  stroke="#94a3b8" 
+                <XAxis dataKey="fecha" stroke="#94a3b8" fontSize={12} tickMargin={10} />
+                <YAxis
+                  stroke="#94a3b8"
                   fontSize={12}
-                  tickMargin={10}
-                  tickFormatter={(val) => val.includes('Hoy') ? 'Hoy' : val}
+                  tickFormatter={value => `US$ ${Math.abs(Number(value)) >= 1000 ? `${(Number(value) / 1000).toFixed(0)}k` : Number(value).toFixed(0)}`}
                 />
-                <YAxis 
-                  stroke="#94a3b8" 
-                  fontSize={12}
-                  tickFormatter={(val) => `US$ ${val >= 1000 ? (val/1000).toFixed(0) + 'k' : val}`}
-                />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '0.75rem', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}
-                  itemStyle={{ color: getChartColor(), fontWeight: 'bold' }}
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '0.75rem' }}
+                  itemStyle={{ color: selectedColor, fontWeight: 'bold' }}
                   labelStyle={{ color: '#94a3b8', marginBottom: '0.5rem' }}
-                  formatter={(value) => [`US$ ${Number(value ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, filter === 'TOTAL' ? 'Patrimonio Total (USD)' : (filter === 'INVERSIONES' ? 'Inversiones (USD)' : 'Fondo de Emergencia (USD)')]}
+                  formatter={value => [formatUSD(Number(value || 0)), viewLabels[view]]}
                 />
-                <Area 
-                  type="monotone" 
-                  dataKey={getDataKey()} 
-                  stroke={getChartColor()} 
+                <Area
+                  type="monotone"
+                  dataKey={selectedDataKey}
+                  stroke={selectedColor}
                   strokeWidth={3}
-                  fillOpacity={1} 
-                  fill="url(#colorValue)" 
+                  fillOpacity={1}
+                  fill="url(#colorValue)"
                 />
               </AreaChart>
             </ResponsiveContainer>
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center text-slate-500">
-              <LineChart size={48} className="mb-4 opacity-50" />
-              <p>No hay suficientes datos para graficar.</p>
-              <p className="text-sm">Agrega hitos históricos o empieza a invertir.</p>
-            </div>
           )}
         </div>
       </div>

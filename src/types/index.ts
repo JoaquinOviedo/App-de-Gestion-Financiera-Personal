@@ -17,13 +17,26 @@ export interface Presupuesto {
   ingreso_mensual: number;
   categorias: CategoriaGasto[];
   asignacion_inversiones: number;
+  asignacion_emergencia: number;
+  asignacion_vacaciones: number;
   moneda?: Moneda;
 }
 
 export interface FondoEmergencia {
-  saldo_actual: number;
+  saldo_ars: number;
+  saldo_usd: number;
   meta_meses: number;
+  incluir_usd_en_cobertura: boolean;
+  // Campos anteriores, aceptados al importar o hidratar datos existentes.
+  saldo_actual?: number;
   moneda?: Moneda;
+  moneda_legacy?: Moneda;
+}
+
+export interface FondoVacaciones {
+  saldo_ars: number;
+  saldo_usd: number;
+  objetivo_usd: number;
 }
 
 export type TipoOperacion = 'COMPRA' | 'VENTA';
@@ -47,6 +60,30 @@ export interface Inversiones {
   operaciones: Operacion[];
 }
 
+export type TipoMovimientoPortafolio = 'APORTE' | 'RETIRO' | 'DIVIDENDO';
+
+export interface MovimientoPortafolio {
+  id: string;
+  fecha: string;
+  tipo: TipoMovimientoPortafolio;
+  monto_usd: number;
+  ticker?: string;
+  nota?: string;
+}
+
+export interface DividendApiEvent {
+  fecha: string;
+  monto_por_accion_usd: number;
+}
+
+export interface DividendApiHistory {
+  ticker: string;
+  fuente: 'YAHOO_FINANCE';
+  estado: 'DISPONIBLE' | 'NO_DISPONIBLE';
+  actualizado_en: string;
+  eventos: DividendApiEvent[];
+}
+
 export type OrigenHistorial = 'MANUAL' | 'AUTO_SNAPSHOT' | 'HISTORICO_AMCHARTS' | 'IMPORTADOR_BROKER';
 
 export interface RegistroHistorial {
@@ -54,6 +91,7 @@ export interface RegistroHistorial {
   fecha: string;
   valor_inversiones: number;
   valor_emergencia: number;
+  valor_vacaciones?: number;
   total: number;
   origen: OrigenHistorial;
   nota?: string;
@@ -68,6 +106,7 @@ export interface RegistroHistorial {
 export interface SnapshotValuation {
   valor_inversiones_usd: number;
   valor_emergencia_usd: number;
+  valor_vacaciones_usd: number;
   cotizacion_mep: number;
   fecha_cotizacion: string;
 }
@@ -76,7 +115,10 @@ export interface AppState {
   version: string;
   presupuesto: Presupuesto;
   fondo_emergencia: FondoEmergencia;
+  fondo_vacaciones: FondoVacaciones;
   inversiones: Inversiones;
+  movimientos_portafolio: MovimientoPortafolio[];
+  dividendos_api: Record<string, DividendApiHistory>;
   historial_patrimonio: RegistroHistorial[];
   cedear_ratios?: Record<string, number>;
 }
@@ -84,6 +126,8 @@ export interface AppState {
 export interface AppStore extends AppState {
   setIngresoMensual: (ingreso: number) => void;
   setAsignacionInversiones: (monto: number) => void;
+  setAsignacionEmergencia: (monto: number) => void;
+  setAsignacionVacaciones: (monto: number) => void;
   setPresupuestoMoneda: (moneda: Moneda) => void;
   addCategoria: (categoria: CategoriaGasto) => void;
   updateCategoria: (id: string, nombre: string) => void;
@@ -91,7 +135,10 @@ export interface AppStore extends AppState {
   addSubgasto: (catId: string, subgasto: SubGasto) => void;
   updateSubgasto: (catId: string, subId: string, data: Partial<SubGasto>) => void;
   removeSubgasto: (catId: string, subId: string) => void;
-  setFondoEmergencia: (saldo: number, metaMeses: number, moneda?: Moneda) => void;
+  setFondoEmergencia: (saldos: { ARS: number; USD: number }, metaMeses: number) => void;
+  setIncluirUsdEnCobertura: (incluir: boolean) => void;
+  setFondoVacaciones: (saldos: { ARS: number; USD: number }) => void;
+  setObjetivoVacaciones: (objetivoUSD: number) => void;
   addOperacion: (op: Operacion) => void;
   removeOperacion: (id: string) => void;
   addHistorial: (registro: Omit<RegistroHistorial, 'id'>) => void;
@@ -102,5 +149,8 @@ export interface AppStore extends AppState {
   importarOperacionesBroker: (operaciones: Operacion[], ingresos: number) => void;
   reemplazarPortafolioActual: (operaciones: Operacion[]) => void;
   updateOperacion: (id: string, data: Partial<Operacion>) => void;
+  addMovimientoPortafolio: (movimiento: Omit<MovimientoPortafolio, 'id'>) => void;
+  removeMovimientoPortafolio: (id: string) => void;
+  setDividendApiHistory: (history: DividendApiHistory) => void;
   setCedearRatios: (ratios: Record<string, number>) => void;
 }

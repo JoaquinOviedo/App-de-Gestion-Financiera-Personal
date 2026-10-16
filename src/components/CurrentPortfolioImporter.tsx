@@ -1,29 +1,13 @@
-import { useState } from 'react';
+import { type ClipboardEvent, useState } from 'react';
 import { X, Check, FileText, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { Operacion } from '../types';
-import { getCedearRatio } from '../lib/cedears';
+import { parseCurrentPortfolio, ParsedHolding } from '../lib/currentPortfolioParser';
 import { v4 as uuidv4 } from 'uuid';
-
-interface ParsedHolding {
-  ticker: string;
-  nombre: string;
-  cantidad: number;
-  precioPromedioUSD: number;
-  precioActualUSD: number;
-  totalUSD: number;
-  ratio: number;
-}
 
 interface Props {
   onClose: () => void;
 }
-
-const parseUSDNumber = (str: string) => {
-  if (!str) return 0;
-  const clean = str.replace(/USD/gi, '').replace(/\s/g, '').replace(/\./g, '').replace(/,/g, '.').replace(/%/g, '');
-  return parseFloat(clean) || 0;
-};
 
 export default function CurrentPortfolioImporter({ onClose }: Props) {
   const [rawText, setRawText] = useState('');
@@ -32,75 +16,19 @@ export default function CurrentPortfolioImporter({ onClose }: Props) {
   
   const { reemplazarPortafolioActual, cedear_ratios } = useStore();
 
-  const handleParse = () => {
+  const parsePortfolio = (text: string) => {
     setIsProcessing(true);
-    const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    
-    const parsed: ParsedHolding[] = [];
-    let pendingTicker = '';
-
-    lines.forEach(line => {
-      // Ignore header lines or section totals
-      if (
-        /^mis inversiones/i.test(line) ||
-        /^producto/i.test(line) ||
-        /^total var/i.test(line) ||
-        /^(cedears|fondos|bonos|acciones)\s+usd/i.test(line)
-      ) {
-        return;
-      }
-
-      // Check if line is just a ticker (e.g. GLD, IBIT, QQQ, SPY, VIG, COMIAUS)
-      if (/^[A-Z0-9.]{2,10}$/i.test(line)) {
-        pendingTicker = line.toUpperCase();
-        return;
-      }
-
-      // If line contains columns (tabs or 2+ spaces)
-      const parts = line.split(/\t+|\s{2,}/).map(p => p.trim()).filter(p => p.length > 0);
-
-      if (parts.length >= 3) {
-        const nombre = parts[0];
-        const cantidad = parseUSDNumber(parts[1]);
-        const precioActualUSD = parseUSDNumber(parts[2]);
-        
-        // PPC is usually column index 5 if 8+ parts, or we check for PPC
-        let precioPromedioUSD = precioActualUSD;
-        if (parts.length >= 6) {
-          precioPromedioUSD = parseUSDNumber(parts[5]) || precioActualUSD;
-        }
-
-        // Total is usually last column
-        let totalUSD = cantidad * precioActualUSD;
-        if (parts.length >= 8) {
-          totalUSD = parseUSDNumber(parts[parts.length - 1]) || totalUSD;
-        }
-
-        let ticker = pendingTicker;
-        if (!ticker) {
-          // Extract first word of nombre if ticker was not on preceding line
-          const match = nombre.match(/^[A-Z0-9]{2,6}/i);
-          ticker = match ? match[0].toUpperCase() : 'ASSET';
-        }
-
-        if (cantidad > 0) {
-          parsed.push({
-            ticker,
-            nombre,
-            cantidad,
-            precioPromedioUSD,
-            precioActualUSD,
-            totalUSD,
-            ratio: getCedearRatio(ticker, cedear_ratios)
-          });
-        }
-
-        pendingTicker = ''; // Reset for next item
-      }
-    });
-
-    setHoldings(parsed);
+    setHoldings(parseCurrentPortfolio(text, cedear_ratios));
     setIsProcessing(false);
+  };
+
+  const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const pastedText = event.clipboardData.getData('text');
+    if (!pastedText.trim()) return;
+
+    event.preventDefault();
+    setRawText(pastedText);
+    parsePortfolio(pastedText);
   };
 
   const handleConfirm = () => {
@@ -162,10 +90,12 @@ export default function CurrentPortfolioImporter({ onClose }: Props) {
               placeholder={`Pega el contenido aquí... Ej:\nGLD\nCedear Spdr Gold Shares\t137,00\tUSD 7,88\t1,10%\tUSD 11,78\tUSD 7,76\t1,60%\tUSD 16,96\tUSD 1.079,56`}
               value={rawText}
               onChange={(e) => setRawText(e.target.value)}
+              onPaste={handlePaste}
             />
-            <div className="flex justify-end">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <p className="text-xs text-gray-500">Al pegar, la composición se analiza automáticamente.</p>
               <button
-                onClick={handleParse}
+                onClick={() => parsePortfolio(rawText)}
                 disabled={isProcessing || rawText.trim().length === 0}
                 className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
               >

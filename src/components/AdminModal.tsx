@@ -13,6 +13,7 @@ import {
   Wrench
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
+import { normalizeEmergencyFund } from '../lib/emergencyFund';
 
 interface Props {
   onClose: () => void;
@@ -35,14 +36,16 @@ export default function AdminModal({
 }: Props) {
   const store = useStore();
   const { fondo_emergencia, setFondoEmergencia } = store;
+  const saldosFondo = normalizeEmergencyFund(fondo_emergencia);
 
-  const [saldoEmergencia, setSaldoEmergencia] = useState(fondo_emergencia.saldo_actual || 0);
-  const [metaMeses, setMetaMeses] = useState(fondo_emergencia.meta_meses || 6);
+  const [saldoARS, setSaldoARS] = useState(saldosFondo.saldo_ars);
+  const [saldoUSD, setSaldoUSD] = useState(saldosFondo.saldo_usd);
+  const [metaMeses, setMetaMeses] = useState(saldosFondo.meta_meses);
   const [savedMessage, setSavedMessage] = useState(false);
 
   const handleSaveEmergencia = (e: React.FormEvent) => {
     e.preventDefault();
-    setFondoEmergencia(Number(saldoEmergencia), Number(metaMeses));
+    setFondoEmergencia({ ARS: saldoARS, USD: saldoUSD }, metaMeses);
     setSavedMessage(true);
     setTimeout(() => setSavedMessage(false), 2000);
   };
@@ -155,7 +158,7 @@ export default function AdminModal({
                 <div>
                   <h4 className="font-semibold text-slate-200 group-hover:text-indigo-400 transition-colors">Importar Base de Datos</h4>
                   <p className="text-xs text-slate-400 mt-1">Carga un archivo `finanzas_personales.json` previamente guardado para restaurar tu estado completo.</p>
-                  <input type="file" accept=".json" className="hidden" onChange={(e) => { onImportJson(e); onClose(); }} />
+                  <input type="file" accept=".json" className="hidden" onChange={onImportJson} />
                 </div>
               </label>
 
@@ -183,21 +186,37 @@ export default function AdminModal({
             </div>
 
             <form onSubmit={handleSaveEmergencia} className="p-5 rounded-xl bg-slate-800/40 border border-slate-700/50 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="text-xs font-medium text-slate-400 mb-1.5 block">Saldo Actual ($)</label>
+                  <label htmlFor="admin-emergency-ars" className="text-xs font-medium text-slate-400 mb-1.5 block">Saldo en pesos (ARS)</label>
                   <input
+                    id="admin-emergency-ars"
                     type="number"
+                    min="0"
                     step="any"
-                    value={saldoEmergencia}
-                    onChange={(e) => setSaldoEmergencia(parseFloat(e.target.value) || 0)}
+                    value={saldoARS || ''}
+                    onChange={(e) => setSaldoARS(Number(e.target.value))}
                     className="w-full bg-slate-900/60 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-yellow-500"
                     placeholder="0.00"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-400 mb-1.5 block">Meta en Meses de Gasto</label>
+                  <label htmlFor="admin-emergency-usd" className="text-xs font-medium text-slate-400 mb-1.5 block">Saldo en dólares (USD)</label>
                   <input
+                    id="admin-emergency-usd"
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={saldoUSD || ''}
+                    onChange={(e) => setSaldoUSD(Number(e.target.value))}
+                    className="w-full bg-slate-900/60 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-yellow-500"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="admin-emergency-months" className="text-xs font-medium text-slate-400 mb-1.5 block">Meta en meses de gasto</label>
+                  <input
+                    id="admin-emergency-months"
                     type="number"
                     step="1"
                     min="1"
